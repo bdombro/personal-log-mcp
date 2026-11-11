@@ -46,7 +46,7 @@ endif()
 
 add_executable(personal-log-mcp src/main.cpp)
 target_include_directories(personal-log-mcp PRIVATE src)
-target_link_libraries(personal-log-mcp PRIVATE slimr::mcp slimr::sqlite app_options)
+target_link_libraries(personal-log-mcp PRIVATE slimr::mcp_http slimr::sqlite app_options)
 set_target_properties(personal-log-mcp PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/build/bin")
@@ -56,7 +56,7 @@ if(BUILD_TESTING)
     add_executable(personal_log_test tests/test_main.cpp)
     target_include_directories(personal_log_test PRIVATE src)
     target_link_libraries(personal_log_test PRIVATE
-        slimr::mcp slimr::sqlite slimr::test app_options)
+        slimr::mcp_http slimr::sqlite slimr::test app_options)
     set_target_properties(personal_log_test PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
     add_test(NAME personal_log COMMAND personal_log_test)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-tmp" "${CMAKE_BINARY_DIR}/test-home")

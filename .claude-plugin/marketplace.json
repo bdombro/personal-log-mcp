@@ -1,0 +1,24 @@
+{
+  "name": "personal-log-mcp",
+  "owner": {
+    "name": "Brian Dombrowski"
+  },
+  "metadata": {
+    "description": "SQLite + FTS5 personal family log MCP server and CLI"
+  },
+  "plugins": [
+    {
+      "name": "personal-log-mcp",
+      "source": "./",
+      "description": "SQLite + FTS5 personal family log MCP server and CLI",
+      "version": "2.0.0",
+      "category": "productivity",
+      "tags": [
+        "mcp",
+        "sqlite",
+        "fts5",
+        "personal-log"
+      ]
+    }
+  ]
+}

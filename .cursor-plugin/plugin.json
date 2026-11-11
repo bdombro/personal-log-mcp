@@ -1,0 +1,24 @@
+{
+  "name": "personal-log-mcp",
+  "version": "2.0.0",
+  "description": "SQLite + FTS5 personal family log MCP server and CLI",
+  "author": {
+    "name": "Brian Dombrowski"
+  },
+  "homepage": "https://github.com/bdombro/personal-log-mcp",
+  "repository": "https://github.com/bdombro/personal-log-mcp",
+  "license": "ISC",
+  "keywords": [
+    "mcp",
+    "sqlite",
+    "fts5",
+    "personal-log",
+    "journal",
+    "memory"
+  ],
+  "mcpServers": {
+    "personal-log-mcp": {
+      "url": "http://127.0.0.1:8082/mcp"
+    }
+  }
+}

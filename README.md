@@ -20,50 +20,107 @@ The MCP also runs scheduled mining across Gmail, Calendar, and WhatsApp, and can
 - Run the scheduled mining pipeline and create Drive backups.
 - Small footprint: a standalone binary and SQLite database, with no Node/V8 MCP runtime.
 
-## `.mcp.json` Configuration
+## Transports & Client Configuration
 
-In the `assistant2` workspace, `personal-log-mcp` is mounted into the unified `build/bin/assistant-mcp` gateway under the `log_` prefix (`log_search`, `log_get`, `log_add`, `log_update`, `log_merge`, `log_delete`, `log_sql`, `log_schema`, `log_runs`, `log_import`, `log_backup`, `log_mine`, `log_status`).
+`personal-log-mcp` is a standalone C++26 binary exposing three invocation modes:
 
-To run `personal-log-mcp` as a standalone MCP server in `.mcp.json`:
+- **Streamable HTTP (`http`):** `personal-log-mcp http` (default endpoint `http://127.0.0.1:8082/mcp`, `--host 127.0.0.1 --port 8082`; `--port 0` requires `--allow-ephemeral-port`; non-loopback binds are refused).
+- **stdio MCP (`mcp`):** `personal-log-mcp mcp` (newline-delimited JSON-RPC over stdin/stdout).
+- **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
+
+> **Breaking MCP `2026-07-28` contract:** Both `http` and `mcp` implement MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
+
+### Streamable HTTP (Recommended)
+
+Run via Homebrew (`just install && just start` or `just install-local && just start`) or directly with `personal-log-mcp http`.
+
+**Claude Code (`.mcp.json` or `.claude-plugin/plugin.json`):**
+
+```json
+{
+  "mcpServers": {
+    "personal-log-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8082/mcp"
+    }
+  }
+}
+```
+
+**Cursor (`.cursor/mcp.json` or `.cursor-plugin/plugin.json`):**
+
+```json
+{
+  "mcpServers": {
+    "personal-log-mcp": {
+      "url": "http://127.0.0.1:8082/mcp"
+    }
+  }
+}
+```
+
+### Standalone stdio MCP
 
 ```json
 {
   "mcpServers": {
     "personal-log-mcp": {
       "command": "/absolute/path/to/personal-log-mcp",
-      "args": ["mcp"],
-      "env": {
-        "PERSONAL_LOG_DB": "/absolute/path/to/log.db"
-      }
+      "args": ["mcp"]
     }
   }
 }
 ```
 
+### Homebrew Service Lifecycle
+
+`Formula/personal-log-mcp.rb` installs `personal-log-mcp` and configures a loopback `brew services` daemon (`http --host 127.0.0.1 --port 8082`, `keep_alive true`, logs in `var/log/personal-log-mcp.log`):
+
+```bash
+just install          # Tap and install from release formula
+just install-local    # Build Release binary, stage local formula, install, and restore formula
+just reinstall-local  # Stop service if running, rebuild, and reinstall local formula
+just start            # Start brew service and verify http://127.0.0.1:8082/mcp readiness
+just stop             # Stop brew service
+just restart          # Restart brew service and verify readiness
+just status           # Inspect brew service status and probe server/discover
+just uninstall        # Stop service and uninstall formula
+```
+
 ## App Architecture
 
-The standalone MCP, JSON CLI, and scheduled mining command are implemented in C++26 on `slimr-cpp`; data lives in the existing SQLite + FTS5 database.
+The standalone MCP (stdio + Streamable HTTP), JSON CLI, and scheduled mining command are implemented in C++26 on `slimr-cpp`; data lives in the SQLite + FTS5 database.
 
 ```text
-plugins/personal-log-mcp/
+personal-log-mcp/
+├── Formula/
+│   └── personal-log-mcp.rb   # Homebrew formula + loopback HTTP service definition
+├── .claude-plugin/           # Claude Code plugin & marketplace manifests (HTTP 127.0.0.1:8082)
+├── .cursor-plugin/           # Cursor plugin manifest (HTTP 127.0.0.1:8082)
 ├── vcpkg.json                # Package dependencies installed under build/deps/
 ├── CMakeLists.txt            # App/test targets, imported dependencies, safety settings
-├── justfile                  # CMake/Ninja configure, test, build, lint, test-mcp
+├── justfile                  # CMake/Ninja configure, test, build, lint, test-mcp, Homebrew lifecycle
 ├── README.md                 # User & operator documentation
 ├── AGENTS.md                 # Maintainer & AI agent conventions
 ├── docs/
 │   ├── conventions.md        # Log entry & tag conventions (`personal-log://conventions`)
 │   └── recall.md             # Multi-source recall playbook (`personal-log://recall`)
+├── scripts/
+│   ├── dev-formula.sh        # Safe stage/reset helper for local Homebrew testing
+│   └── test-mcp.mjs          # July 2026-07-28 stdio + ephemeral HTTP smoke test
 ├── src/
-│   ├── db.hpp                # `AppDb` over `sqlite.hpp`: schema v1, FTS5 `entries_fts`, CRUD, merge, read-only `sql`, online `backup`
+│   ├── db.hpp                # `AppDb` over `sqlite.hpp`: schema v1, WAL, per-DB mutex, FTS5 `entries_fts`, CRUD, merge, read-only `sql`, online `backup`
 │   ├── import.hpp            # `parseYearNote` parser for legacy Obsidian `YYYY.md` yearly notes
 │   ├── mine.hpp              # Scheduled mining pipeline (Gmail, Calendar, WhatsApp -> log, Deadlines, AI-Suggests, Meds, Contacts, Expenses) & Drive `backupLog`
+│   ├── mine_config.hpp       # Strict lazy loader for `PERSONAL_LOG_MINE_CONFIG` / XDG `mine.json`
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
-│   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, and opt-in error reporting
-│   └── main.cpp              # Standalone CLI & stdio MCP entrypoint
+│   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
+│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 127.0.0.1:8082) entrypoint
 ├── tests/
-│   ├── test_db.hpp           # tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
-│   ├── test_mine.hpp         # mock tests covering mining pipeline, LLM fallback, sanitizers, follow-ups & backup pruning
+│   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
+│   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
+│   ├── test_mine.hpp         # Mock tests covering mining pipeline, LLM fallback, sanitizers, follow-ups & backup pruning
+│   ├── test_mine_config.hpp  # Strict config & lazy-discovery isolation tests
 │   └── test_main.cpp         # Combined test runner (all suites)
 └── build/bin/
     └── personal-log-mcp      # Standalone native Release binary
@@ -71,8 +128,8 @@ plugins/personal-log-mcp/
 
 ### Libraries Used
 
-- **`<mcp.hpp>` & `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), and narrow JSON CLI.
-- **`<sqlite.hpp>` (`-lsqlite3`):** WAL mode, FTS5 (`entries_fts`), 256-statement LRU cache, nested savepoints (`merge`), `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON` for `log_sql`), and online `sqlite3_backup_init` (`log_backup`).
+- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), narrow JSON CLI, and Streamable HTTP server (`libhv`).
+- **`<sqlite.hpp>` (`-lsqlite3`):** WAL mode + `synchronous=NORMAL` (for file-backed DBs), per-`AppDb` mutex across transactions and 256-statement LRU cache, FTS5 (`entries_fts`), nested savepoints (`merge`), `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON` for `sql`), and online `sqlite3_backup_init` (`backup`).
 - **`<curl.hpp>` (`-lcurl`):** LLM calls (DeepSeek, Gemini AI Studio) with retry/backoff (`fetchWithRetry`).
 - **`<json.hpp>` (`glaze`):** Fast JSON serialization and LLM structured output parsing.
 - **`<bugsink.hpp>` (`-lcurl`):** Automatic error and fallback warning reporting to an explicitly configured Bugsink endpoint (with PII scrubbed via `scrub()`).
@@ -80,23 +137,23 @@ plugins/personal-log-mcp/
 
 ## Tools & CLI Commands
 
-Every tool is exposed over MCP (`personal-log-mcp mcp` or via `assistant-mcp` under the `log_` prefix) and on the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resources and data paths are unchanged.
+Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:8082/mcp`), stdio MCP (`personal-log-mcp mcp`), and the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resources and data paths are unchanged.
 
-| Tool | Gateway Name | Mutating | Description |
+| Tool | Mutating | Thread-Safe HTTP | Description |
 | --- | --- | --- | --- |
-| `search` | `log_search` | No | Full-text BM25 search (`entries_fts`) combined with `from`/`to` date range, `tags` (all must match), `source` prefix (`cal:`, `gm:`, `wa:`), and `limit` filters. |
-| `get` | `log_get` | No | Fetch one or more log entries by `id` (or `ids`) or by `source` reference (`cal:...`, `gm:...`, `wa:...`). |
-| `add` | `log_add` | Yes | Add a dated entry (`date` as `YYYY-MM-DD`, `summary`, optional `details`, normalized `tags`, `links`, and `sources`). Deduplicates on existing `source` keys via `addKeepingEntry`. |
-| `update` | `log_update` | Yes | Update `date`, `summary`, `details`, `tags`, `links`, or `sources` on an existing entry ID. |
-| `merge` | `log_merge` | Yes | Merge a duplicate entry (`fromId`) into a target entry (`intoId`), unioning `tags`, `links`, and `sources` inside a transaction before deleting `fromId`. |
-| `delete` | `log_delete` | Yes | Delete an entry by `id`. |
-| `sql` | `log_sql` | No | Run a read-only `SELECT` / `WITH` query against `log.db` using `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON`, row limit default 200 / max 1000). |
-| `schema` | `log_schema` | No | Returns the DDL and column documentation for `entries`, `entry_tags`, `entry_sources`, `entries_fts`, and `runs`. |
-| `runs` | `log_runs` | No | List recent mining job runs (`started_at`, `finished_at`, `status`, `window_since`, `window_until`, `stats`, `error`). |
-| `import` | `log_import` | Yes | Parse and import legacy Obsidian `YYYY.md` yearly notes (`parseYearNote`), extracting dates, inline `#tags`, `[[wikilinks]]`, markdown links, and `(cal:...)`/`(gm:...)`/`(wa:...)` source tags. Supports `dryRun`. |
-| `backup` | `log_backup` | Yes | Perform an online SQLite backup (`sqlite3_backup_init`) of `log.db`, compress with `gzip`, upload to Google Drive (`Backups/personal-log/`), and prune older Drive backups according to the retention policy. |
-| `mine` | `log_mine` | Yes | Run the scheduled multi-stage mining pipeline across Gmail, Google Calendar, and WhatsApp (supports `since`, `until`, `dryRun`). |
-| `status` | `log_status` | No | Returns plugin version and active database path. |
+| `search` | No | Yes | Full-text BM25 search (`entries_fts`) combined with `from`/`to` date range, `tags` (all must match), `person`, and `limit` filters. |
+| `get` | No | Yes | Fetch a log entry by `id` or by `source` (`{kind, id}` such as `cal`, `gm`, `wa`). |
+| `add` | Yes | Serialized | Add dated `entries` (`date` as `YYYY.MM.DD` or `YYYY-MM-DD`, `title`, optional `details`, normalized `tags`, `people`, `links`, and `sources`). Deduplicates on existing `source` keys via `addKeepingEntry`. |
+| `update` | Yes | Serialized | Update `date`, `title`, `details`, tags, people, links, or sources on an existing entry `id`. |
+| `merge` | Yes | Serialized | Merge a duplicate entry (`mergeId`) into a target entry (`keepId`), unioning tags, people, links, and sources inside a transaction before deleting `mergeId`. |
+| `delete` | Yes | Serialized | Delete an entry by `id`. |
+| `sql` | No | Yes | Run a read-only `SELECT` / `WITH` `query` against `log.db` using `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON`, row `limit` default 200 / max 1000). |
+| `schema` | No | Yes | Returns the DDL and column documentation for `entries`, `entry_tags`, `entry_sources`, `entries_fts`, and `runs`. |
+| `runs` | No | Yes | List recent mining job runs (`started_at`, `finished_at`, `status`, `window_since`, `window_until`, `stats`, `error`). |
+| `import` | Yes | Serialized | Parse and import legacy Obsidian `YYYY.md` yearly notes (`parseYearNote`), extracting dates, inline `#tags`, `[[wikilinks]]`, markdown links, and `(cal:...)`/`(gm:...)`/`(wa:...)` source tags. Supports `dryRun`. |
+| `backup` | Yes | Serialized | Perform an online SQLite backup (`sqlite3_backup_init`) of `log.db`, compress with `gzip`, upload to Google Drive (`Backups/personal-log/`), and prune older Drive backups (or copy locally via `destPath`). |
+| `mine` | Yes | Serialized | Run the scheduled multi-stage mining pipeline across Gmail, Google Calendar, and WhatsApp (supports `since`, `until`, `dryRun`, `noBackup`). |
+| `status` | No | Yes | Returns plugin version. |
 
 ### Embedded MCP Resources
 
@@ -187,6 +244,75 @@ Keep household guidance, personal history and private note locations there.
 
 Error reporting is disabled by default; no reporting endpoint is bundled.
 
+## macOS Build Prerequisites (vcpkg setup)
+
+Install [Homebrew](https://brew.sh) and current Xcode Command Line Tools
+(`xcode-select --install`; finish installation before continuing), or full Xcode.
+Apple Clang 21 is the verified C++26/libc++ toolchain; older installations need
+upgrading. These instructions assume Apple Silicon Homebrew at `/opt/homebrew`.
+
+Add this environment snippet to `~/.zshrc`, then open a new terminal (or run
+`source ~/.zshrc`). Use `~/.zshrc`, not `~/.zshenv`, to avoid changing
+non-interactive zsh scripts:
+
+`local-ports` is the dedicated vcpkg overlay directory for local development
+linking: `just publish --local --all` registers symlinks to your slimr-cpp checkout,
+overriding published packages without making a registry release. See the
+[publishing guide on slimr-cpp](https://github.com/bdombro/slimr-cpp/blob/main/docs/publishing.md#local-environment).
+
+```bash
+export VCPKG_ROOT="$HOME/.local/share/vcpkg"
+export VCPKG_OVERLAY_PORTS="$VCPKG_ROOT/local-ports"
+# Use your existing workspace checkout instead when available.
+export SLIMR_CPP="${SLIMR_CPP:-$HOME/dev/bdombro/slimr-cpp}"
+export CXX="/usr/bin/clang++"
+export CLANG_TIDY="/opt/homebrew/opt/llvm/bin/clang-tidy"
+export PATH="$VCPKG_ROOT:/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+```
+
+Then install and build from the repository root:
+
+```bash
+brew install cmake ninja just llvm node ruby autoconf automake libtool pkgconf
+mkdir -p "$(dirname "$VCPKG_ROOT")"
+if [ ! -d "$VCPKG_ROOT/.git" ]; then
+  git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+fi
+"$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+mkdir -p "$(dirname "$SLIMR_CPP")"
+if [ ! -d "$SLIMR_CPP/.git" ]; then
+  git clone https://github.com/bdombro/slimr-cpp.git "$SLIMR_CPP"
+fi
+(cd "$SLIMR_CPP" && just publish --local --all)
+ln -s "$SLIMR_CPP/ports/libhv" "$VCPKG_OVERLAY_PORTS/libhv"
+
+"$CXX" --version
+vcpkg version
+BUGSINK_DSN="" just test
+just build
+```
+
+The libhv link is a one-time step: if it exists, verify that it points to the
+chosen checkout's `ports/libhv` before skipping the command. Never overwrite
+a conflicting port directory or modify installed headers/caches. Current HTTP
+builds need both local slimr overlays and the separately pinned libhv port;
+the older published registry baseline alone is not an HTTP build substitute.
+`just deps` installs dependencies under `build/deps/`, including static
+SQLite/FTS5 and curl; separate Homebrew library installs are unnecessary.
+
+Bootstrapping puts the executable at `$VCPKG_ROOT/vcpkg`, with no `bin/`
+subdirectory. Keg-only Homebrew Ruby supplies `/opt/homebrew/opt/ruby/bin/ruby`.
+Homebrew LLVM supplies lint tooling; select a different compatible `CXX`
+before first configure if needed, since CMake caches it. For reproducible
+vcpkg tooling, check out the tested full `VCPKG_REF` commit before bootstrapping;
+package registry baselines pin resolution separately.
+Mining/Drive backup need the companion plugins and an authenticated
+[Google Workspace CLI](https://github.com/googleworkspace/cli)
+(`npm install -g @googleworkspace/cli`); macOS already supplies `gzip`.
+Private mining configuration and provider credentials are separate runtime
+setup. These commands only run mock tests/builds: no mining, cloud
+authorization, service startup, or scheduled job installation.
+
 ## Building & Testing
 
 Build with Clang/C++26 and libc++ FAST hardening, CMake 3.31+, Ninja, [just](https://just.systems), [vcpkg](https://vcpkg.io), and a compatible clang-tidy. Set `VCPKG_ROOT` to a bootstrapped checkout and put `vcpkg` on `PATH`; configure the local overlay explicitly:
@@ -195,16 +321,16 @@ Build with Clang/C++26 and libc++ FAST hardening, CMake 3.31+, Ninja, [just](htt
 export VCPKG_OVERLAY_PORTS="$VCPKG_ROOT/local-ports"
 ```
 
-`just configure`, `test`, `build`, and `lint` automatically run `deps`, installing manifest dependencies under `build/deps/`. CMake uses installed `slimr::mcp` and `slimr::sqlite` targets with static SQLite/FTS5; manifest auto-install is disabled. Local overlay ports must already be registered; no source-checkout include overrides or global executable installs are used. Registry publication is separate.
+`just configure`, `test`, `build`, and `lint` automatically run `deps`, installing manifest dependencies under `build/deps/`. CMake uses installed `slimr::mcp_http` (`slimr-mcp[http]`) and `slimr::sqlite` targets with static SQLite/FTS5; manifest auto-install is disabled. Local overlay ports must already be registered; no source-checkout include overrides or global executable installs are used. Registry publication is separate.
 
-Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. Set `CXX` before the first configure to override the default Apple compiler on macOS or `clang++` on Linux; subsequent configures preserve CMake's cached compiler even when clang-tidy is added to `PATH`. CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME/XDG/temporary directories. Release builds run those tests too.
+Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. Set `CXX` before the first configure to override the default Apple compiler on macOS or `clang++` on Linux; subsequent configures preserve CMake's cached compiler even when `clang-tidy` is added to `PATH`. `just lint` also honors `CLANG_TIDY` (defaulting to `clang-tidy`). CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME/XDG/temporary directories. Release builds run those tests too.
 
 ```bash
-just test     # Run unit and pipeline tests covering DB, FTS5, import, and mining pipeline with ASan + UBSan
+just test     # Run DB, FTS5, import, HTTP, concurrency, and mock mining tests with ASan + UBSan
 just build    # Build/test Release binary at build/bin/personal-log-mcp
 just lint     # Analyze app and test translation units using compile_commands.json
-just test-mcp # Inspector 2.14.0 initialize + tools/list only (requires compatible Node/npm)
+just test-mcp # Verify July 2026-07-28 stdio + ephemeral HTTP discovery, tools/list, status, and legacy rejection
 just run --help # Run the existing Release binary without rebuilding
 ```
 
-Inspector runs the server with an isolated HOME/XDG environment, no external CLI PATH or credentials, and Bugsink disabled; it never invokes mining, cloud, or database tools. Linux/macOS PR CI uses the same commands and requires the tested full `VCPKG_REF` commit variable; slimr packages use the pinned public registry without a dependency token. Linux execution and remote merge-gate enforcement are not claimed by local macOS verification.
+`just test-mcp` runs the server with an isolated HOME/XDG environment, no external CLI PATH or credentials, and Bugsink disabled; it never invokes mining, cloud, or database tools. Linux/macOS PR CI uses the same commands and requires the tested full `VCPKG_REF` commit variable; slimr packages use the pinned public registry without a dependency token. Linux execution and remote merge-gate enforcement are not claimed by local macOS verification.

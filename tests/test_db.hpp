@@ -13,6 +13,24 @@
 
 namespace personal_log::testing {
 
+inline slimr::Json make_mcp_req(
+    slimr::Json id,
+    std::string_view method,
+    slimr::Json params = slimr::json_obj(),
+    std::string_view version = slimr::kMcpProtocolVersion
+) {
+    slimr::Json meta = slimr::json_obj();
+    meta["io.modelcontextprotocol/protocolVersion"] = std::string(version);
+    meta["io.modelcontextprotocol/clientCapabilities"] = slimr::json_obj();
+    params["_meta"] = std::move(meta);
+    slimr::Json req = slimr::json_obj();
+    req["jsonrpc"] = "2.0";
+    req["id"] = std::move(id);
+    req["method"] = std::string(method);
+    req["params"] = std::move(params);
+    return req;
+}
+
 inline NewEntry make_entry(
     std::string date = "2030.11.04",
     std::string title = "Riley OT school observation",
@@ -249,6 +267,8 @@ TEST_SUITE("parseYearNote") {
 // ============================================================================
 // 4. App & MCP Tools
 // ============================================================================
+
+
 TEST_SUITE("app tools and resources") {
     TEST_CASE("exports all required tools, resources, and status schema") {
         auto db = std::make_shared<AppDb>(":memory:");
@@ -279,12 +299,10 @@ TEST_SUITE("app tools and resources") {
         CHECK(!app.resources[1].load().empty());
 
         // Status tool call
-        slimr::Json req = slimr::Json::object_t{};
-        req["jsonrpc"] = "2.0";
-        req["id"] = 1;
-        req["method"] = "tools/call";
-        req["params"]["name"] = "status";
-        req["params"]["arguments"] = slimr::Json::object_t{};
+        slimr::Json statusParams = slimr::json_obj();
+        statusParams["name"] = "status";
+        statusParams["arguments"] = slimr::json_obj();
+        auto req = make_mcp_req(1, "tools/call", std::move(statusParams));
         auto resp = app.dispatchMcpJson(req);
         CHECK(!resp.contains("error"));
         CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("2.0.0") != std::string::npos);
@@ -301,32 +319,28 @@ TEST_SUITE("app tools and resources") {
         auto db = std::make_shared<AppDb>(":memory:");
         auto app = make_personal_log_app(db);
 
-        slimr::Json addReq = slimr::Json::object_t{};
-        addReq["jsonrpc"] = "2.0";
-        addReq["id"] = 10;
-        addReq["method"] = "tools/call";
-        addReq["params"]["name"] = "add";
-        slimr::Json newEntry = slimr::Json::object_t{};
+        slimr::Json newEntry = slimr::json_obj();
         newEntry["date"] = "2030-11-04";
         newEntry["title"] = "Test MCP Add";
         newEntry["tags"] = slimr::Json::array_t{"#test", "family"};
         newEntry["details"] = slimr::Json::array_t{"Some detail line"};
-        addReq["params"]["arguments"] = slimr::Json::object_t{
+        slimr::Json addParams = slimr::json_obj();
+        addParams["name"] = "add";
+        addParams["arguments"] = slimr::Json::object_t{
             {"entries", slimr::Json::array_t{newEntry}}
         };
+        auto addReq = make_mcp_req(10, "tools/call", std::move(addParams));
 
         auto resp = app.dispatchMcpJson(addReq);
         CHECK(!resp.contains("error"));
         CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("\"added\":[1]") != std::string::npos);
 
-        slimr::Json searchReq = slimr::Json::object_t{};
-        searchReq["jsonrpc"] = "2.0";
-        searchReq["id"] = 11;
-        searchReq["method"] = "tools/call";
-        searchReq["params"]["name"] = "search";
-        searchReq["params"]["arguments"] = slimr::Json::object_t{
+        slimr::Json searchParams = slimr::json_obj();
+        searchParams["name"] = "search";
+        searchParams["arguments"] = slimr::Json::object_t{
             {"query", "Test MCP"}
         };
+        auto searchReq = make_mcp_req(11, "tools/call", std::move(searchParams));
         auto searchResp = app.dispatchMcpJson(searchReq);
         CHECK(!searchResp.contains("error"));
         CHECK(searchResp["result"]["content"][0]["text"].get<std::string>().find("Test MCP Add") != std::string::npos);
@@ -345,15 +359,13 @@ TEST_SUITE("app tools and resources") {
         auto app = make_personal_log_app(db);
 
         // dry-run
-        slimr::Json req = slimr::Json::object_t{};
-        req["jsonrpc"] = "2.0";
-        req["id"] = 20;
-        req["method"] = "tools/call";
-        req["params"]["name"] = "import";
-        req["params"]["arguments"] = slimr::Json::object_t{
+        slimr::Json importParams = slimr::json_obj();
+        importParams["name"] = "import";
+        importParams["arguments"] = slimr::Json::object_t{
             {"dir", temp.path.string()},
             {"dryRun", true}
         };
+        auto req = make_mcp_req(20, "tools/call", std::move(importParams));
         auto resp = app.dispatchMcpJson(req);
         CHECK(!resp.contains("error"));
         auto parsed = slimr::parse_json<slimr::Json>(resp["result"]["content"][0]["text"].get<std::string>());

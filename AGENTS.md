@@ -18,9 +18,9 @@ Written for: AI coding agents working in the `personal-log-mcp` C++26 plugin rep
 
 | Path | Owns | Must Not |
 | --- | --- | --- |
-| `src/main.cpp` | Entrypoint calling `personal_log::make_personal_log_app().run(argc, argv)` | Business logic |
-| `src/app.hpp` | `make_personal_log_app()` registering all 13 tools (`add`, `get`, `search`, `update`, `merge`, `delete`, `sql`, `schema`, `runs`, `import`, `backup`, `mine`, `status`), resources, and opt-in Bugsink reporting | Direct SQL or LLM logic |
-| `src/db.hpp` | `AppDb` over `slimr::Database` (`PRAGMA user_version = 1`), FTS5 `ftsQuery`, date/tag normalization, CRUD, `merge`, read-only `sql` (`iterateLimited`), and `runs` tracking | Change schema v1 incompatibly with live `log.db` |
+| `src/main.cpp` | Entrypoint calling `slimr::enable_http(..., {.host = "127.0.0.1", .port = 8082})` before `personal_log::make_personal_log_app().run(argc, argv)` | Business logic |
+| `src/app.hpp` | `make_personal_log_app()` registering all 13 tools (`add`, `get`, `search`, `update`, `merge`, `delete`, `sql`, `schema`, `runs`, `import`, `backup`, `mine`, `status`), resources, thread-safety annotations, lazy mutex-guarded DB initialization, and opt-in Bugsink reporting | Direct SQL or LLM logic |
+| `src/db.hpp` | `AppDb` over `slimr::Database` (`PRAGMA user_version = 1`, WAL + `synchronous=NORMAL` for file DBs, per-DB mutex across transactions and LRU statement cache), FTS5 `ftsQuery`, date/tag normalization, CRUD, `merge`, read-only `sql` (`iterateLimited`), and `runs` tracking | Change schema v1 incompatibly with live `log.db` |
 | `src/import.hpp` | `parseYearNote` parser for legacy Obsidian `YYYY.md` notes | Mutate vault files |
 | `src/mine.hpp` | Scheduled mining pipeline (`runMine`), `ToolRunner`, LLM triage/draft/fallback (`modelFor`, `fetchWithRetry`), follow-ups (`addExpenseRows`, `replaceMedsSection`, Contacts, Kids Drive docs), PII scrubber (`scrub`), and `backupLog` / `prune` | Write source calendars or leak PII in Bugsink warnings |
 | `src/mine_config.hpp` | Strict, lazy private JSON mining configuration and XDG paths | Embed private defaults or echo configuration values in errors |
@@ -38,7 +38,7 @@ Written for: AI coding agents working in the `personal-log-mcp` C++26 plugin rep
 
 CMake declares targets/dependencies; Ninja owns incremental builds. Just orchestrates automatic `deps` before configure/build/test/lint; CMake manifest auto-install is disabled. Set `VCPKG_ROOT` and `VCPKG_OVERLAY_PORTS` in the environment. Dependencies install under `build/deps/`; Debug sanitizer and Release trees live under `build/cmake/`. Use installed slimr targets, never source-checkout include overrides. SQLite is statically linked with FTS5; no system SQLite CLI or server is required. `run` does not rebuild.
 
-Use a Clang/C++26 toolchain with libc++ FAST hardening, CMake, Ninja, vcpkg, just, and compatible clang-tidy. Inspector uses pinned npm tooling and an isolated server environment; it only initializes and lists tools. Tests use synthetic databases and mocked mining APIs; never run mining, backup, or real cloud tools for validation.
+Use a Clang/C++26 toolchain with libc++ FAST hardening, CMake, Ninja, vcpkg, just, and compatible clang-tidy (`CLANG_TIDY` env var supported). `just test-mcp` validates July `2026-07-28` MCP discovery (`server/discover`), `tools/list`, `status`, and legacy `initialize` rejection over both stdio (`mcp`) and ephemeral HTTP (`http --host 127.0.0.1 --port 0 --allow-ephemeral-port`) in an isolated temporary HOME/XDG environment. Tests use synthetic databases and mocked mining APIs; never run mining, backup, or real cloud tools for validation.
 
 ## C++ Memory Safety
 

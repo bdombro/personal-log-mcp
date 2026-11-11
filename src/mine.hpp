@@ -7,6 +7,7 @@
 #include "sqlite.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -17,6 +18,7 @@
 #include <iomanip>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <regex>
 #include <set>
@@ -351,13 +353,24 @@ public:
     virtual std::optional<std::vector<double>> jev(const std::vector<JevQuestion>& questions) = 0;
 };
 
-inline std::shared_ptr<ToolRunner>& current_tools() {
+inline std::mutex& tools_mutex() {
+    static std::mutex mu;
+    return mu;
+}
+
+inline std::shared_ptr<ToolRunner>& current_tools_storage() {
     static std::shared_ptr<ToolRunner> runner = nullptr;
     return runner;
 }
 
+inline std::shared_ptr<ToolRunner> current_tools() {
+    std::lock_guard<std::mutex> lock(tools_mutex());
+    return current_tools_storage();
+}
+
 inline void setTools(std::shared_ptr<ToolRunner> runner) {
-    current_tools() = runner;
+    std::lock_guard<std::mutex> lock(tools_mutex());
+    current_tools_storage() = std::move(runner);
 }
 
 // ============================================================================
@@ -1072,9 +1085,11 @@ inline std::vector<std::string> prune(const std::vector<std::string>& files) {
 }
 
 inline BackupResult backupLog(AppDb& db, const std::string& today = "") {
+    static std::atomic<uint64_t> backupSeq{0};
     std::string day = !today.empty() ? today : format_iso_now().substr(0, 10);
     std::string name = "log-" + day + ".db.gz";
-    std::string tmp = "/tmp/personal-log-backup-" + std::to_string(getpid());
+    std::string tmp = "/tmp/personal-log-backup-" + std::to_string(getpid()) + "-" +
+                      std::to_string(backupSeq.fetch_add(1, std::memory_order_relaxed));
     std::string tmpDb = tmp + ".db";
     std::string tmpGz = tmp + ".gz";
 

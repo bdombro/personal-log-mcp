@@ -5,3 +5,4 @@ dist/
 *.dSYM/
 .DS_Store
 /.ci/
+Formula/.staging/

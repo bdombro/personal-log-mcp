@@ -9,6 +9,7 @@
 #include <ctime>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -404,11 +405,17 @@ public:
         db_ = std::make_unique<slimr::SqliteDb>(path_, std::move(opts));
     }
 
+    AppDb(const AppDb&) = delete;
+    AppDb& operator=(const AppDb&) = delete;
+    AppDb(AppDb&&) = delete;
+    AppDb& operator=(AppDb&&) = delete;
+
     static AppDb open(std::string path = defaultDbPath()) {
         return AppDb(std::move(path));
     }
 
     void close() {
+        std::lock_guard<std::mutex> lock(mu_);
         if (db_) {
             db_->close();
         }
@@ -417,7 +424,14 @@ public:
     slimr::SqliteDb& sqlite() { return *db_; }
     const std::string& path() const noexcept { return path_; }
 
+    template <typename Fn>
+    decltype(auto) withLock(Fn&& fn) {
+        std::lock_guard<std::mutex> lock(mu_);
+        return fn(*db_);
+    }
+
     void ping() {
+        std::lock_guard<std::mutex> lock(mu_);
         (void)db_->get("SELECT 1;");
     }
 
@@ -425,13 +439,14 @@ public:
 
     /// Add entries in one transaction; entries with an already-logged source are skipped.
     AddResult add(const std::vector<NewEntry>& entries) {
+        std::lock_guard<std::mutex> lock(mu_);
         AddResult result;
         db_->transaction([&](slimr::Tx&) {
             for (size_t index = 0; index < entries.size(); ++index) {
                 const auto& entry = entries[index];
                 std::optional<std::pair<Source, int64_t>> clash = std::nullopt;
                 for (const auto& s : entry.sources) {
-                    auto owner = sourceOwner(s);
+                    auto owner = sourceOwnerLocked(s);
                     if (owner) {
                         clash = std::make_pair(s, *owner);
                         break;
@@ -454,8 +469,8 @@ public:
                                    {normDate, entry.title, detailsJson});
                 int64_t entryId = rr.lastInsertRowid;
 
-                attachRelations(entryId, entry.tags, entry.people, entry.sources, entry.links);
-                reindex(entryId);
+                attachRelationsLocked(entryId, entry.tags, entry.people, entry.sources, entry.links);
+                reindexLocked(entryId);
                 result.added.push_back(entryId);
             }
         });
@@ -464,35 +479,36 @@ public:
 
     /// Add one entry, dropping (and returning) any source already owned by another entry; used by import.
     AddKeepingResult addKeepingEntry(const NewEntry& entry) {
+        std::lock_guard<std::mutex> lock(mu_);
         AddKeepingResult res;
-        std::vector<Source> keptSources;
-        for (const auto& s : entry.sources) {
-            auto owner = sourceOwner(s);
-            if (!owner) {
-                keptSources.push_back(s);
-            } else {
-                res.droppedSources.push_back(s.kind + ":" + s.id);
-            }
-        }
-
-        std::vector<Source> uniqueSources;
-        std::set<std::string> seen;
-        for (const auto& s : keptSources) {
-            std::string key = s.kind + ":" + s.id;
-            if (seen.insert(key).second) {
-                uniqueSources.push_back(s);
-            }
-        }
-
         int64_t id = 0;
         db_->transaction([&](slimr::Tx&) {
+            std::vector<Source> keptSources;
+            for (const auto& s : entry.sources) {
+                auto owner = sourceOwnerLocked(s);
+                if (!owner) {
+                    keptSources.push_back(s);
+                } else {
+                    res.droppedSources.push_back(s.kind + ":" + s.id);
+                }
+            }
+
+            std::vector<Source> uniqueSources;
+            std::set<std::string> seen;
+            for (const auto& s : keptSources) {
+                std::string key = s.kind + ":" + s.id;
+                if (seen.insert(key).second) {
+                    uniqueSources.push_back(s);
+                }
+            }
+
             std::string normDate = normalizeDate(entry.date);
             std::string detailsJson = slimr::write_json(entry.details);
             auto rr = db_->run("INSERT INTO entries (date, title, details) VALUES (?, ?, ?)",
                                {normDate, entry.title, detailsJson});
             id = rr.lastInsertRowid;
-            attachRelations(id, entry.tags, entry.people, uniqueSources, entry.links);
-            reindex(id);
+            attachRelationsLocked(id, entry.tags, entry.people, uniqueSources, entry.links);
+            reindexLocked(id);
         });
         res.id = id;
         return res;
@@ -500,25 +516,21 @@ public:
 
     /// One entry by id, or std::nullopt.
     std::optional<Entry> get(int64_t id) {
-        auto row = db_->get("SELECT id, date, title, details FROM entries WHERE id = ?", {id});
-        if (!row) return std::nullopt;
-        const auto& r = *row;
-        int64_t eid = r.at("id").get<int64_t>();
-        std::string date = r.at("date").get<std::string>();
-        std::string title = r.at("title").get<std::string>();
-        std::string details = r.at("details").get<std::string>();
-        return hydrate(eid, date, title, details);
+        std::lock_guard<std::mutex> lock(mu_);
+        return getLocked(id);
     }
 
     /// The entry owning a source, or std::nullopt.
     std::optional<Entry> getBySource(const Source& source) {
-        auto owner = sourceOwner(source);
+        std::lock_guard<std::mutex> lock(mu_);
+        auto owner = sourceOwnerLocked(source);
         if (!owner) return std::nullopt;
-        return get(*owner);
+        return getLocked(*owner);
     }
 
     /// Search entries: FTS keywords (relevance, then newest) or filters only (newest first).
     std::vector<Entry> search(const SearchFilters& filters) {
+        std::lock_guard<std::mutex> lock(mu_);
         std::vector<std::string> where;
         std::vector<slimr::SqlValue> params;
         std::string from = "entries e";
@@ -576,27 +588,29 @@ public:
             std::string date = r.at("date").get<std::string>();
             std::string title = r.at("title").get<std::string>();
             std::string details = r.at("details").get<std::string>();
-            entries.push_back(hydrate(id, date, title, details));
+            entries.push_back(hydrateLocked(id, date, title, details));
         }
         return entries;
     }
 
     /// Apply a patch to one entry; std::nullopt when it doesn't exist.
     std::optional<Entry> update(int64_t id, const EntryPatch& patch) {
-        auto existing = get(id);
+        std::lock_guard<std::mutex> lock(mu_);
+        auto existing = getLocked(id);
         if (!existing) return std::nullopt;
 
         db_->transaction([&](slimr::Tx&) {
-            applyPatch(id, patch);
+            applyPatchLocked(id, patch);
         });
 
-        return get(id);
+        return getLocked(id);
     }
 
     /// Fold mergeId into keepId, then delete it.
     std::optional<Entry> merge(int64_t keepId, int64_t mergeId) {
-        auto keep = get(keepId);
-        auto gone = get(mergeId);
+        std::lock_guard<std::mutex> lock(mu_);
+        auto keep = getLocked(keepId);
+        auto gone = getLocked(mergeId);
         if (!keep || !gone || keepId == mergeId) return std::nullopt;
 
         db_->transaction([&](slimr::Tx&) {
@@ -616,14 +630,15 @@ public:
             patch.addSources = gone->sources;
             patch.addLinks = gone->links;
 
-            applyPatch(keepId, patch);
+            applyPatchLocked(keepId, patch);
         });
 
-        return get(keepId);
+        return getLocked(keepId);
     }
 
     /// Delete one entry; false when it doesn't exist.
     bool deleteEntry(int64_t id) {
+        std::lock_guard<std::mutex> lock(mu_);
         bool deleted = false;
         db_->transaction([&](slimr::Tx&) {
             auto rr = db_->run("DELETE FROM entries WHERE id = ?", {id});
@@ -638,18 +653,22 @@ public:
         if (!is_select_or_with(query)) {
             throw std::runtime_error("Only SELECT or WITH queries are allowed.");
         }
+        int64_t bounded = limit < 1 ? 1 : (limit > 1000 ? 1000 : limit);
         slimr::IterateOptions opts;
-        opts.limit = static_cast<size_t>(limit);
+        opts.limit = static_cast<size_t>(bounded);
         opts.readOnlyConnection = true;
+        std::lock_guard<std::mutex> lock(mu_);
         auto res = db_->iterateLimited(query, opts);
         return SqlResult{.rows = std::move(res.rows), .truncated = res.truncated};
     }
 
     /// Recent mining runs, newest first.
     std::vector<Run> runs(int64_t limit = 20) {
+        int64_t bounded = limit < 1 ? 1 : (limit > 500 ? 500 : limit);
+        std::lock_guard<std::mutex> lock(mu_);
         auto rows = db_->all(
             "SELECT id, started_at, finished_at, since, until, status, stats, error FROM runs ORDER BY id DESC LIMIT ?",
-            std::vector<slimr::SqlValue>{limit}
+            std::vector<slimr::SqlValue>{bounded}
         );
         std::vector<Run> res;
         res.reserve(rows.size());
@@ -676,6 +695,7 @@ public:
 
     /// Start a mining run; returns its id.
     int64_t runStart(const std::string& since, const std::string& until) {
+        std::lock_guard<std::mutex> lock(mu_);
         std::string now = format_iso_now();
         auto rr = db_->run(
             "INSERT INTO runs (started_at, since, until, status) VALUES (?, ?, ?, 'running')",
@@ -686,6 +706,7 @@ public:
 
     /// Finish a mining run.
     void runFinish(int64_t id, const std::string& status, const slimr::Json& stats, const std::optional<std::string>& error = std::nullopt) {
+        std::lock_guard<std::mutex> lock(mu_);
         std::string now = format_iso_now();
         std::string statsStr = slimr::write_json(stats);
         slimr::SqlValue errVal = error.has_value() ? slimr::SqlValue(*error) : slimr::SqlValue(std::monostate{});
@@ -697,27 +718,46 @@ public:
 
     /// Window end of the last successful run, or std::nullopt.
     std::optional<std::string> lastSuccessfulUntil() {
+        std::lock_guard<std::mutex> lock(mu_);
         return db_->pluck<std::string>("SELECT until FROM runs WHERE status = 'ok' ORDER BY id DESC LIMIT 1");
     }
 
     /// Back up the database to destPath.
     void backup(const std::string& destPath) {
+        std::lock_guard<std::mutex> lock(mu_);
         db_->backup(destPath);
     }
 
     /// Look up entry owning source.
     std::optional<int64_t> sourceOwner(const Source& s) {
+        std::lock_guard<std::mutex> lock(mu_);
+        return sourceOwnerLocked(s);
+    }
+
+private:
+    std::string path_;
+    mutable std::mutex mu_;
+    std::unique_ptr<slimr::SqliteDb> db_;
+
+    std::optional<Entry> getLocked(int64_t id) {
+        auto row = db_->get("SELECT id, date, title, details FROM entries WHERE id = ?", {id});
+        if (!row) return std::nullopt;
+        const auto& r = *row;
+        int64_t eid = r.at("id").get<int64_t>();
+        std::string date = r.at("date").get<std::string>();
+        std::string title = r.at("title").get<std::string>();
+        std::string details = r.at("details").get<std::string>();
+        return hydrateLocked(eid, date, title, details);
+    }
+
+    std::optional<int64_t> sourceOwnerLocked(const Source& s) {
         return db_->pluck<int64_t>(
             "SELECT entry_id FROM entry_sources WHERE kind = ? AND source_id = ?",
             std::vector<slimr::SqlValue>{s.kind, s.id}
         );
     }
 
-private:
-    std::string path_;
-    std::unique_ptr<slimr::SqliteDb> db_;
-
-    void attachRelations(
+    void attachRelationsLocked(
         int64_t id,
         const std::vector<std::string>& tags,
         const std::vector<Person>& people,
@@ -752,7 +792,7 @@ private:
         }
     }
 
-    void applyPatch(int64_t id, const EntryPatch& patch) {
+    void applyPatchLocked(int64_t id, const EntryPatch& patch) {
         if (patch.date) {
             db_->run("UPDATE entries SET date = ? WHERE id = ?", {normalizeDate(*patch.date), id});
         }
@@ -775,18 +815,18 @@ private:
             db_->run("DELETE FROM entry_links WHERE entry_id = ? AND url = ?", {id, url});
         }
         for (const auto& s : patch.addSources) {
-            auto owner = sourceOwner(s);
+            auto owner = sourceOwnerLocked(s);
             if (owner && *owner != id) {
                 throw std::runtime_error("Source " + s.kind + ":" + s.id + " already belongs to entry " + std::to_string(*owner) + ".");
             }
         }
-        attachRelations(id, patch.addTags, patch.addPeople, patch.addSources, patch.addLinks);
+        attachRelationsLocked(id, patch.addTags, patch.addPeople, patch.addSources, patch.addLinks);
         db_->run("UPDATE entries SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?", {id});
-        reindex(id);
+        reindexLocked(id);
     }
 
-    void reindex(int64_t id) {
-        auto entryOpt = get(id);
+    void reindexLocked(int64_t id) {
+        auto entryOpt = getLocked(id);
         db_->run("DELETE FROM entries_fts WHERE rowid = ?", {id});
         if (!entryOpt) return;
         const auto& entry = *entryOpt;
@@ -808,7 +848,7 @@ private:
         db_->run("INSERT INTO entries_fts (rowid, title, body) VALUES (?, ?, ?)", {id, entry.title, body});
     }
 
-    Entry hydrate(int64_t id, const std::string& date, const std::string& title, const std::string& detailsJson) {
+    Entry hydrateLocked(int64_t id, const std::string& date, const std::string& title, const std::string& detailsJson) {
         Entry entry;
         entry.id = id;
         entry.date = date;

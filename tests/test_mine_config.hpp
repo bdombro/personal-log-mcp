@@ -101,7 +101,14 @@ TEST_SUITE("mining configuration") {
         CHECK(app.tools().contains("mine"));
         slimr::Json request = slimr::Json::object_t{
             {"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/call"},
-            {"params", slimr::Json::object_t{{"name", "status"}, {"arguments", slimr::Json::object_t{}}}},
+            {"params", slimr::Json::object_t{
+                {"name", "status"},
+                {"arguments", slimr::Json::object_t{}},
+                {"_meta", slimr::Json::object_t{
+                    {"io.modelcontextprotocol/protocolVersion", std::string(slimr::kMcpProtocolVersion)},
+                    {"io.modelcontextprotocol/clientCapabilities", slimr::json_obj()},
+                }},
+            }},
         };
         CHECK(!app.dispatchMcpJson(request).contains("error"));
         request["params"]["name"] = "mine";

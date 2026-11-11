@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -240,10 +241,19 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
         }
     });
 
-    auto get_db = [sharedDb]() -> AppDb& {
-        static std::shared_ptr<AppDb> s_db = sharedDb ? sharedDb : std::make_shared<AppDb>(defaultDbPath());
-        if (sharedDb) return *sharedDb;
-        return *s_db;
+    struct DbState {
+        std::mutex mu;
+        std::shared_ptr<AppDb> db;
+    };
+    auto dbState = std::make_shared<DbState>();
+    dbState->db = std::move(sharedDb);
+
+    auto get_db = [dbState]() -> AppDb& {
+        std::lock_guard<std::mutex> lock(dbState->mu);
+        if (!dbState->db) {
+            dbState->db = std::make_shared<AppDb>(defaultDbPath());
+        }
+        return *dbState->db;
     };
 
     // 1. add
@@ -260,7 +270,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<GetInput>(
         "get",
         "Get one log entry by id, or by a calendar, Gmail or WhatsApp source id.",
-        slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false},
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false}, .threadSafe = true},
         [get_db](const GetInput& in) -> GetOutput {
             if (!in.id.get().has_value() && !in.source.get().has_value()) {
                 throw std::runtime_error("Give `id` or `source`.");
@@ -276,7 +286,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<SearchInput>(
         "search",
         "Search the family log by keywords, date range, tags and person; with no query it lists a timeline, newest first.",
-        slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false},
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false}, .threadSafe = true},
         [get_db](const SearchInput& in) -> SearchOutput {
             SearchFilters filters;
             filters.query = in.query.get();
@@ -344,7 +354,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<SqlInput>(
         "sql",
         "Run a read-only SQL query over the log (counts, groupings, joins). Call `schema` first.",
-        slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false},
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false}, .threadSafe = true},
         [get_db](const SqlInput& in) -> SqlResult {
             return get_db().sql(in.query.get(), in.limit.get());
         }
@@ -354,7 +364,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<SchemaInput>(
         "schema",
         "Describe the log's tables and views for the `sql` tool.",
-        slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false},
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false}, .threadSafe = true},
         [](const SchemaInput&) -> SchemaOutput {
             return SchemaOutput{.schema = std::string(SCHEMA_NOTES)};
         }
@@ -364,7 +374,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<RunsInput>(
         "runs",
         "List recent mining runs (window, status, counts, errors).",
-        slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false},
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false}, .threadSafe = true},
         [get_db](const RunsInput& in) -> RunsOutput {
             return RunsOutput{.runs = get_db().runs(in.limit.get())};
         }
@@ -434,7 +444,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<StatusInput>(
         "status",
         "Show app version.",
-        slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false},
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = true, .openWorldHint = false}, .threadSafe = true},
         [](const StatusInput&) -> StatusOutput {
             return StatusOutput{.version = std::string(APP_VERSION)};
         }
