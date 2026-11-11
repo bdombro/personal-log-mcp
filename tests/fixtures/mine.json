@@ -1,0 +1,98 @@
+{
+  "calendars": {
+    "source1@example.com": "Example source 1",
+    "source2@example.com": "Example source 2",
+    "source3@example.com": "Example source 3",
+    "source4@example.com": "Example source 4"
+  },
+  "suggestCalendarId": "suggestions@example.com",
+  "deadlinesTasklist": "example-deadlines",
+  "whatsappChats": [
+    {
+      "name": "Jamie",
+      "kind": "direct",
+      "direct": true
+    },
+    {
+      "name": "Example chat 2",
+      "kind": "group",
+      "direct": false
+    },
+    {
+      "name": "Example chat 3",
+      "kind": "group",
+      "direct": false
+    },
+    {
+      "name": "Example chat 4",
+      "kind": "group",
+      "direct": false
+    },
+    {
+      "name": "Example chat 5",
+      "kind": "group",
+      "direct": false
+    },
+    {
+      "name": "Example chat 6",
+      "kind": "group",
+      "direct": false
+    }
+  ],
+  "keepDomains": [
+    "source1.example.com",
+    "source2.example.com",
+    "source3.example.com",
+    "source4.example.com",
+    "source5.example.com",
+    "source6.example.com",
+    "source7.example.com",
+    "source8.example.com",
+    "source9.example.com"
+  ],
+  "gmailAccount": "alex@example.com",
+  "medicalExpensesNote": "Records/Example expenses.md",
+  "medicalExpensesSince": "2030.01.01",
+  "medsNotes": {
+    "alex": "People/Alex Morgan.md",
+    "jamie": "People/Jamie Morgan.md",
+    "casey": "People/Casey Morgan.md",
+    "riley": "People/Riley Morgan.md"
+  },
+  "kidsDrive": {
+    "casey": "Documents/Casey",
+    "riley": "Documents/Riley"
+  },
+  "kidsSchoolFolder": "Example School",
+  "contactGroups": [
+    "Example group 1",
+    "Example group 2",
+    "Example group 3",
+    "Example group 4",
+    "Example group 5",
+    "Example group 6",
+    "Example group 7",
+    "Example group 8",
+    "Example group 9",
+    "Example group 10"
+  ],
+  "whoNames": {
+    "alex": "Alex",
+    "jamie": "Jamie",
+    "casey": "Casey",
+    "riley": "Riley"
+  },
+  "familyAliases": [
+    "alex",
+    "jamie",
+    "casey",
+    "riley",
+    "alias5",
+    "alias6"
+  ],
+  "familySurname": "morgan",
+  "selfName": "Alex",
+  "timeZone": "Etc/UTC",
+  "eventSuggestionNote": "Suggested by personal-log mining. Copy to your own calendar if wanted.",
+  "deadlineNote": "(added by personal-log mining)"
+}
