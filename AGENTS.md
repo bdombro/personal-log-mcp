@@ -4,6 +4,14 @@ Written for: AI coding agents working in the `personal-log-mcp` C++26 plugin rep
 
 `personal-log-mcp` is a C++26 MCP plugin and CLI built on `slimr-cpp` that manages a personal log in SQLite + FTS5 (`~/.local/share/personal-log/log.db`), serves the `personal-log://recall` and `personal-log://conventions` resources, backs up the database to Google Drive, and runs the scheduled mining pipeline (`mine`).
 
+
+## Documentation Upkeep
+
+When a change conflicts with `README.md`, update the affected README and its
+linked user/developer documentation in the same change. Keep examples,
+configuration, install/build commands and compatibility claims consistent
+with implemented behavior; do not claim unverified release or client support.
+
 ## Commands
 
 | Task | Command |

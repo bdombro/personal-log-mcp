@@ -13,6 +13,18 @@ Use this MCP to search a timeline of family and personal events, with the origin
 
 The MCP also runs scheduled mining across Gmail, Calendar, and WhatsApp, and can back up the log to Drive. It opens the existing SQLite database in place, so moving to this version does not require a data migration.
 
+> **Client compatibility:** MCP **2026-07-28 only**; legacy clients cannot connect.
+> The workspace has been exercised with OpenCode v2.2.6 using explicit July
+> configuration. Cursor's July support is deferred; Claude Code July runtime
+> acceptance is not yet verified. Shipping a plugin manifest is not proof of
+> client compatibility.
+
+## Try It
+
+After setup, ask your agent:
+
+> When was the boiler last serviced? Include the original source.
+
 ## Features
 
 - Search and retrieve dated entries, inspect mining runs, and run bounded read-only SQL.
@@ -20,120 +32,73 @@ The MCP also runs scheduled mining across Gmail, Calendar, and WhatsApp, and can
 - Run the scheduled mining pipeline and create Drive backups.
 - Small footprint: a standalone binary and SQLite database, with no Node/V8 MCP runtime.
 
-## Transports & Client Configuration
+## Installation
 
-`personal-log-mcp` is a standalone C++26 binary exposing three invocation modes:
+- **Prebuilt release:** the checked-in [Homebrew formula](Formula/personal-log-mcp.rb)
+  currently has a placeholder checksum. It is not a ready-to-install release.
+  Check [releases](https://github.com/bdombro/personal-log-mcp/releases) for published
+  binaries and a finalized formula before using a release installation command.
+- **Build from source:** the current path is [Development](#development).
+  Local slimr overlays are for development, not a runtime requirement.
+- **Already installed:** follow the setup and service steps below. Installing a
+  Cursor/Claude manifest only configures an endpoint; it does not install or
+  start the native service.
 
-- **Streamable HTTP (`http`):** `personal-log-mcp http` (default endpoint `http://127.0.0.1:8082/mcp`, `--host 127.0.0.1 --port 8082`; `--port 0` requires `--allow-ephemeral-port`; non-loopback binds are refused).
-- **stdio MCP (`mcp`):** `personal-log-mcp mcp` (newline-delimited JSON-RPC over stdin/stdout).
-- **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
 
-> **Breaking MCP `2026-07-28` contract:** Both `http` and `mcp` implement MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
+## Configure the Log
 
-### Streamable HTTP (Recommended)
+The default database is `~/.local/share/personal-log/log.db`; use
+`PERSONAL_LOG_DB` in the server environment to select another database.
+Ordinary log search/edit tools do not require Google credentials or a mining
+configuration. Existing data is opened in place; do not rename or replace
+your data directory as part of installation.
 
-Run via Homebrew (`just install && just start` or `just install-local && just start`) or directly with `personal-log-mcp http`.
+Mining and Drive backup are opt-in and need additional private configuration,
+credentials and companion tools. They are not part of the basic setup.
 
-**Claude Code (`.mcp.json` or `.claude-plugin/plugin.json`):**
 
-```json
-{
-  "mcpServers": {
-    "personal-log-mcp": {
-      "type": "http",
-      "url": "http://127.0.0.1:8082/mcp"
-    }
-  }
-}
-```
+## Start and Manage the Service
 
-**Cursor (`.cursor/mcp.json` or `.cursor-plugin/plugin.json`):**
-
-```json
-{
-  "mcpServers": {
-    "personal-log-mcp": {
-      "url": "http://127.0.0.1:8082/mcp"
-    }
-  }
-}
-```
-
-### Standalone stdio MCP
-
-```json
-{
-  "mcpServers": {
-    "personal-log-mcp": {
-      "command": "/absolute/path/to/personal-log-mcp",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-### Homebrew Service Lifecycle
-
-`Formula/personal-log-mcp.rb` installs `personal-log-mcp` and configures a loopback `brew services` daemon (`http --host 127.0.0.1 --port 8082`, `keep_alive true`, logs in `var/log/personal-log-mcp.log`):
+For an already-installed Homebrew formula:
 
 ```bash
-just install          # Tap and install from release formula
-just install-local    # Build Release binary, stage local formula, install, and restore formula
-just reinstall-local  # Stop service if running, rebuild, and reinstall local formula
-just start            # Start brew service and verify http://127.0.0.1:8082/mcp readiness
-just stop             # Stop brew service
-just restart          # Restart brew service and verify readiness
-just status           # Inspect brew service status and probe server/discover
-just uninstall        # Stop service and uninstall formula
+brew services start bdombro/personal-log-mcp/personal-log-mcp
+brew services info personal-log-mcp
+brew services restart bdombro/personal-log-mcp/personal-log-mcp
+brew services stop bdombro/personal-log-mcp/personal-log-mcp
 ```
 
-## App Architecture
+The endpoint is `http://127.0.0.1:8082/mcp`; logs are under
+`/opt/homebrew/var/log/`. To run in the foreground instead, use
+`personal-log-mcp http` (or `./build/bin/personal-log-mcp http` from a source checkout).
+Do not run the foreground server and service on the same port.
+Keep the default loopback bind; this is not a shared remote-host deployment.
 
-The standalone MCP (stdio + Streamable HTTP), JSON CLI, and scheduled mining command are implemented in C++26 on `slimr-cpp`; data lives in the SQLite + FTS5 database.
 
-```text
-personal-log-mcp/
-├── Formula/
-│   └── personal-log-mcp.rb   # Homebrew formula + loopback HTTP service definition
-├── .claude-plugin/           # Claude Code plugin & marketplace manifests (HTTP 127.0.0.1:8082)
-├── .cursor-plugin/           # Cursor plugin manifest (HTTP 127.0.0.1:8082)
-├── vcpkg.json                # Package dependencies installed under build/deps/
-├── CMakeLists.txt            # App/test targets, imported dependencies, safety settings
-├── justfile                  # CMake/Ninja configure, test, build, lint, test-mcp, Homebrew lifecycle
-├── README.md                 # User & operator documentation
-├── AGENTS.md                 # Maintainer & AI agent conventions
-├── docs/
-│   ├── conventions.md        # Log entry & tag conventions (`personal-log://conventions`)
-│   └── recall.md             # Multi-source recall playbook (`personal-log://recall`)
-├── scripts/
-│   ├── dev-formula.sh        # Safe stage/reset helper for local Homebrew testing
-│   └── test-mcp.mjs          # July 2026-07-28 stdio + ephemeral HTTP smoke test
-├── src/
-│   ├── db.hpp                # `AppDb` over `sqlite.hpp`: schema v1, WAL, per-DB mutex, FTS5 `entries_fts`, CRUD, merge, read-only `sql`, online `backup`
-│   ├── import.hpp            # `parseYearNote` parser for legacy Obsidian `YYYY.md` yearly notes
-│   ├── mine.hpp              # Scheduled mining pipeline (Gmail, Calendar, WhatsApp -> log, Deadlines, AI-Suggests, Meds, Contacts, Expenses) & Drive `backupLog`
-│   ├── mine_config.hpp       # Strict lazy loader for `PERSONAL_LOG_MINE_CONFIG` / XDG `mine.json`
-│   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
-│   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
-│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 127.0.0.1:8082) entrypoint
-├── tests/
-│   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
-│   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
-│   ├── test_mine.hpp         # Mock tests covering mining pipeline, LLM fallback, sanitizers, follow-ups & backup pruning
-│   ├── test_mine_config.hpp  # Strict config & lazy-discovery isolation tests
-│   └── test_main.cpp         # Combined test runner (all suites)
-└── build/bin/
-    └── personal-log-mcp      # Standalone native Release binary
+## Connect Your Agent
+
+After starting the service, add this server to OpenCode v2.2.6's
+`opencode.jsonc` (merge it with any existing servers):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "personal-log-mcp": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8082/mcp",
+        "protocol": "2026-07-28"
+      }
+    }
+  }
+}
 ```
 
-### Libraries Used
+Use either an explicit server entry or a plugin manifest, not both.
+Alternative client schemas and stdio configuration are in the
+[developer reference](docs/development.md). The compatibility notice above
+applies to every transport.
 
-- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), narrow JSON CLI, and Streamable HTTP server (`libhv`).
-- **`<sqlite.hpp>` (`-lsqlite3`):** WAL mode + `synchronous=NORMAL` (for file-backed DBs), per-`AppDb` mutex across transactions and 256-statement LRU cache, FTS5 (`entries_fts`), nested savepoints (`merge`), `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON` for `sql`), and online `sqlite3_backup_init` (`backup`).
-- **`<curl.hpp>` (`-lcurl`):** LLM calls (DeepSeek, Gemini AI Studio) with retry/backoff (`fetchWithRetry`).
-- **`<json.hpp>` (`glaze`):** Fast JSON serialization and LLM structured output parsing.
-- **`<bugsink.hpp>` (`-lcurl`):** Automatic error and fallback warning reporting to an explicitly configured Bugsink endpoint (with PII scrubbed via `scrub()`).
-- **`<test.hpp>` (`doctest`):** Full unit and pipeline test suite compiled with `-fsanitize=address,undefined`.
 
 ## Tools & CLI Commands
 
@@ -183,66 +148,45 @@ Compiled directly into the binary (`src/docs_embed.hpp`) and served via `resourc
 ./build/bin/personal-log-mcp backup
 ```
 
-## Scheduled Mining Pipeline (`src/mine.hpp`)
+## Optional Mining and Backup
 
-Mining is opt-in. Before running it, create a **private** configuration file:
+Mining is disabled until explicitly configured. It can read Gmail, Calendar
+and WhatsApp, call an LLM, and write approved log/task/contact/note destinations.
+Use a separate private suggestion calendar; never write source calendars.
+A mining dry run is not an offline check.
 
-1. Copy [`docs/mine.example.json`](docs/mine.example.json) to
-   `$XDG_CONFIG_HOME/personal-log/mine.json`, or `~/.config/personal-log/mine.json`
-   when `XDG_CONFIG_HOME` is unset.
-2. Replace every synthetic identity, address, calendar/task-list identifier,
-   chat name, note path and document folder with destinations you explicitly
-   authorize. Use a separate private suggestion calendar, never a source
-   calendar or `primary`.
-3. Restrict the file to your user (`chmod 600`). Never commit it.
+Follow the [mining and backup guide](docs/mining.md) and its private example
+configuration. Ordinary log tools do not require that setup.
 
-`PERSONAL_LOG_MINE_CONFIG` selects an explicit file instead. All example fields
-are required and strictly typed; unknown fields, missing files and invalid
-values fail before mining opens the database or calls any source. Configuration
-is read at mining invocation, not MCP startup or discovery. Other tools do not
-require it. A dry run still reads authorized sources and uses the configured
-LLM; it is not an offline configuration check.
 
-The JSON contains `calendars` (source ID → label), `suggestCalendarId`,
-`deadlinesTasklist`, `whatsappChats` (`name`, `kind`, `direct`), `keepDomains`,
-`gmailAccount`, `selfName`, `timeZone`, `eventSuggestionNote`, `deadlineNote`,
-`medicalExpensesNote`, `medicalExpensesSince` (`YYYY.MM.DD`), `medsNotes`
-(person tag → note), `kidsDrive` (person tag → folder), `kidsSchoolFolder`,
-`contactGroups`, `whoNames` (tag → display name), `familyAliases` and
-`familySurname` (normalized lowercase aliases/surname excluded from contact
-creation). Empty collections select no sources or targets for that collection.
-Medical examples are fictional; supply only information you are authorized to
-process.
+## Troubleshooting
 
-Optional private `conventions.md` and `recall.md` files in the same XDG
-`personal-log` directory replace the corresponding public MCP resources.
-Keep household guidance, personal history and private note locations there.
+- **Client cannot connect:** confirm it supports July MCP, the service is
+  running, and the client URL matches the configured port. OpenCode needs
+  `"protocol": "2026-07-28"`; old `initialize` clients will fail.
+- **Port occupied:** inspect the listener and stop only the service/process
+  you own, or deliberately choose another port and update the client URL.
+- **Works in a terminal, not as a service:** launchd does not inherit
+  `~/.zshrc`. Configure the service environment separately or use the
+  plugin's supported private configuration file; inspect
+  `/opt/homebrew/var/log/` for errors.
+- **Mining configuration fails:** validate the private file against the example before invoking mining. A dry run still reads authorized sources and may call an LLM.
+- **Source build cannot find vcpkg or slimr ports:** load the development
+  environment, bootstrap vcpkg, and register both slimr links and the pinned
+  libhv overlay. Never repair this by editing installed headers.
+- **Compiler/hardening check fails:** upgrade the Xcode toolchain; set
+  `CXX` before first configure. CMake caches the compiler, so an intentional
+  compiler change needs a fresh configuration tree.
 
-1. **Window selection:** Reads `lastSuccessfulUntil` from the `runs` table (defaulting to a lookback window) up to `now`.
-2. **Source gathering:**
-   - **Gmail & Calendar:** Fetches messages, threads, and calendar events in the window via `gws` (filtering email noise via Jev scores and keep-domains).
-   - **WhatsApp:** Exports message chunks across configured chats since the window start.
-3. **Two-tier LLM pipeline (`ASSISTANT_LLM_FAST` & `ASSISTANT_LLM_DEFAULT`):**
-   - **Fast model** triages email and WhatsApp chunks to filter noise and newsletters.
-   - **Default model** drafts structured log entries (`add` / `update` / `merge`), `Deadlines` Google Tasks, `AI-Suggests` private calendar events (never writing source calendars), and follow-up updates to `Meds`, `Medical Expenses`, Kids Drive documents, and `Contacts`.
-   - Automatic fallback (`ASSISTANT_LLM_FAST_FALLBACK`, `ASSISTANT_LLM_DEFAULT_FALLBACK`) if the primary provider hits rate limits or errors, recording a warning in `runs` and reporting to Bugsink.
 
-### LLM & Environment Configuration
+## Development
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PERSONAL_LOG_DB` | `~/.local/share/personal-log/log.db` | Path to the SQLite + FTS5 log database |
-| `PERSONAL_LOG_MINE_CONFIG` | XDG `personal-log/mine.json` | Required private mining configuration |
-| `PERSONAL_LOG_SUGGEST_CALENDAR_ID` | Configured `suggestCalendarId` | Suggestion destination override; validated before mining side effects |
-| `ASSISTANT_LLM_DEFAULT` | `deepseek-v4-pro` | Model for drafting log entries, Meds, and Contacts (`agy:<model>`, `gemini-...`, or DeepSeek) |
-| `ASSISTANT_LLM_FAST` | `deepseek-flash` | Model for high-volume email/WhatsApp chunk triage |
-| `ASSISTANT_LLM_DEFAULT_FALLBACK` | `deepseek-v4-pro` | Fallback when `ASSISTANT_LLM_DEFAULT` fails (`none` disables) |
-| `ASSISTANT_LLM_FAST_FALLBACK` | `deepseek-flash` | Fallback when `ASSISTANT_LLM_FAST` fails (`none` disables) |
-| `DEEPSEEK_API_KEY` | — | API key for DeepSeek models |
-| `GEMINI_API_KEY` | — | API key for Gemini AI Studio models |
-| `BUGSINK_DSN` | Disabled | Error reporting DSN (unset or `""` disables) |
+This section is for building or changing the server, not configuring an
+installed binary. [Architecture, transport reference and test details](docs/development.md)
+are separate from the user setup flow.
 
-Error reporting is disabled by default; no reporting endpoint is bundled.
+<details>
+<summary>macOS source-build setup (vcpkg and local slimr overlays)</summary>
 
 ## macOS Build Prerequisites (vcpkg setup)
 
@@ -313,24 +257,14 @@ Private mining configuration and provider credentials are separate runtime
 setup. These commands only run mock tests/builds: no mining, cloud
 authorization, service startup, or scheduled job installation.
 
-## Building & Testing
+</details>
 
-Build with Clang/C++26 and libc++ FAST hardening, CMake 3.31+, Ninja, [just](https://just.systems), [vcpkg](https://vcpkg.io), and a compatible clang-tidy. Set `VCPKG_ROOT` to a bootstrapped checkout and put `vcpkg` on `PATH`; configure the local overlay explicitly:
-
-```bash
-export VCPKG_OVERLAY_PORTS="$VCPKG_ROOT/local-ports"
-```
-
-`just configure`, `test`, `build`, and `lint` automatically run `deps`, installing manifest dependencies under `build/deps/`. CMake uses installed `slimr::mcp_http` (`slimr-mcp[http]`) and `slimr::sqlite` targets with static SQLite/FTS5; manifest auto-install is disabled. Local overlay ports must already be registered; no source-checkout include overrides or global executable installs are used. Registry publication is separate.
-
-Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. Set `CXX` before the first configure to override the default Apple compiler on macOS or `clang++` on Linux; subsequent configures preserve CMake's cached compiler even when `clang-tidy` is added to `PATH`. `just lint` also honors `CLANG_TIDY` (defaulting to `clang-tidy`). CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME/XDG/temporary directories. Release builds run those tests too.
+After the source build succeeds, stage and install the local Homebrew formula:
 
 ```bash
-just test     # Run DB, FTS5, import, HTTP, concurrency, and mock mining tests with ASan + UBSan
-just build    # Build/test Release binary at build/bin/personal-log-mcp
-just lint     # Analyze app and test translation units using compile_commands.json
-just test-mcp # Verify July 2026-07-28 stdio + ephemeral HTTP discovery, tools/list, status, and legacy rejection
-just run --help # Run the existing Release binary without rebuilding
+just install-local
 ```
 
-`just test-mcp` runs the server with an isolated HOME/XDG environment, no external CLI PATH or credentials, and Bugsink disabled; it never invokes mining, cloud, or database tools. Linux/macOS PR CI uses the same commands and requires the tested full `VCPKG_REF` commit variable; slimr packages use the pinned public registry without a dependency token. Linux execution and remote merge-gate enforcement are not claimed by local macOS verification.
+Installing a formula and starting its service are separate actions.
+For a source-only foreground run, use
+`./build/bin/personal-log-mcp http`.
