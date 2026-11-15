@@ -50,7 +50,7 @@ class PersonalLogMcp < Formula
   end
 
   service do
-    run [opt_bin/"personal-log-mcp", "http", "--host", "127.0.0.1", "--port", "8082"]
+    run [opt_bin/"personal-log-mcp", "http", "--host", "127.0.0.1", "--port", "10002"]
     keep_alive true
     log_path var/"log/personal-log-mcp.log"
     error_log_path var/"log/personal-log-mcp.log"

@@ -68,7 +68,7 @@ brew services restart bdombro/personal-log-mcp/personal-log-mcp
 brew services stop bdombro/personal-log-mcp/personal-log-mcp
 ```
 
-The endpoint is `http://127.0.0.1:8082/mcp`; logs are under
+The endpoint is `http://127.0.0.1:10002/mcp`; logs are under
 `/opt/homebrew/var/log/`. To run in the foreground instead, use
 `personal-log-mcp http` (or `./build/bin/personal-log-mcp http` from a source checkout).
 Do not run the foreground server and service on the same port.
@@ -86,7 +86,7 @@ After starting the service, add this server to OpenCode v2.2.6's
     "servers": {
       "personal-log-mcp": {
         "type": "remote",
-        "url": "http://127.0.0.1:8082/mcp",
+        "url": "http://127.0.0.1:10002/mcp",
         "protocol": "2026-07-28"
       }
     }
@@ -102,7 +102,7 @@ applies to every transport.
 
 ## Tools & CLI Commands
 
-Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:8082/mcp`), stdio MCP (`personal-log-mcp mcp`), and the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resources and data paths are unchanged.
+Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:10002/mcp`), stdio MCP (`personal-log-mcp mcp`), and the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resources and data paths are unchanged.
 
 | Tool | Mutating | Thread-Safe HTTP | Description |
 | --- | --- | --- | --- |

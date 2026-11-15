@@ -26,7 +26,7 @@ with implemented behavior; do not claim unverified release or client support.
 
 | Path | Owns | Must Not |
 | --- | --- | --- |
-| `src/main.cpp` | Entrypoint calling `slimr::enable_http(..., {.host = "127.0.0.1", .port = 8082})` before `personal_log::make_personal_log_app().run(argc, argv)` | Business logic |
+| `src/main.cpp` | Entrypoint calling `slimr::enable_http(..., {.host = "127.0.0.1", .port = 10002})` before `personal_log::make_personal_log_app().run(argc, argv)` | Business logic |
 | `src/app.hpp` | `make_personal_log_app()` registering all 13 tools (`add`, `get`, `search`, `update`, `merge`, `delete`, `sql`, `schema`, `runs`, `import`, `backup`, `mine`, `status`), resources, thread-safety annotations, lazy mutex-guarded DB initialization, and opt-in Bugsink reporting | Direct SQL or LLM logic |
 | `src/db.hpp` | `AppDb` over `slimr::Database` (`PRAGMA user_version = 1`, WAL + `synchronous=NORMAL` for file DBs, per-DB mutex across transactions and LRU statement cache), FTS5 `ftsQuery`, date/tag normalization, CRUD, `merge`, read-only `sql` (`iterateLimited`), and `runs` tracking | Change schema v1 incompatibly with live `log.db` |
 | `src/import.hpp` | `parseYearNote` parser for legacy Obsidian `YYYY.md` notes | Mutate vault files |

@@ -18,8 +18,8 @@ The standalone MCP (stdio + Streamable HTTP), JSON CLI, and scheduled mining com
 personal-log-mcp/
 ├── Formula/
 │   └── personal-log-mcp.rb   # Homebrew formula + loopback HTTP service definition
-├── .claude-plugin/           # Claude Code plugin & marketplace manifests (HTTP 127.0.0.1:8082)
-├── .cursor-plugin/           # Cursor plugin manifest (HTTP 127.0.0.1:8082)
+├── .claude-plugin/           # Claude Code plugin & marketplace manifests (HTTP 127.0.0.1:10002)
+├── .cursor-plugin/           # Cursor plugin manifest (HTTP 127.0.0.1:10002)
 ├── vcpkg.json                # Package dependencies installed under build/deps/
 ├── CMakeLists.txt            # App/test targets, imported dependencies, safety settings
 ├── justfile                  # CMake/Ninja configure, test, build, lint, test-mcp, Homebrew lifecycle
@@ -38,7 +38,7 @@ personal-log-mcp/
 │   ├── mine_config.hpp       # Strict lazy loader for `PERSONAL_LOG_MINE_CONFIG` / XDG `mine.json`
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
 │   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
-│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 127.0.0.1:8082) entrypoint
+│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 127.0.0.1:10002) entrypoint
 ├── tests/
 │   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
 │   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
@@ -62,7 +62,7 @@ personal-log-mcp/
 
 `personal-log-mcp` is a standalone C++26 binary exposing three invocation modes:
 
-- **Streamable HTTP (`http`):** `personal-log-mcp http` (default endpoint `http://127.0.0.1:8082/mcp`, `--host 127.0.0.1 --port 8082`; `--port 0` requires `--allow-ephemeral-port`; non-loopback binds are refused).
+- **Streamable HTTP (`http`):** `personal-log-mcp http` (default endpoint `http://127.0.0.1:10002/mcp`, `--host 127.0.0.1 --port 10002`; `--port 0` requires `--allow-ephemeral-port`; non-loopback binds are refused).
 - **stdio MCP (`mcp`):** `personal-log-mcp mcp` (newline-delimited JSON-RPC over stdin/stdout).
 - **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
 
@@ -79,7 +79,7 @@ Run via Homebrew (`just install && just start` or `just install-local && just st
   "mcpServers": {
     "personal-log-mcp": {
       "type": "http",
-      "url": "http://127.0.0.1:8082/mcp"
+      "url": "http://127.0.0.1:10002/mcp"
     }
   }
 }
@@ -91,7 +91,7 @@ Run via Homebrew (`just install && just start` or `just install-local && just st
 {
   "mcpServers": {
     "personal-log-mcp": {
-      "url": "http://127.0.0.1:8082/mcp"
+      "url": "http://127.0.0.1:10002/mcp"
     }
   }
 }
@@ -112,13 +112,13 @@ Run via Homebrew (`just install && just start` or `just install-local && just st
 
 ### Homebrew Service Lifecycle
 
-`Formula/personal-log-mcp.rb` installs `personal-log-mcp` and configures a loopback `brew services` daemon (`http --host 127.0.0.1 --port 8082`, `keep_alive true`, logs in `var/log/personal-log-mcp.log`):
+`Formula/personal-log-mcp.rb` installs `personal-log-mcp` and configures a loopback `brew services` daemon (`http --host 127.0.0.1 --port 10002`, `keep_alive true`, logs in `var/log/personal-log-mcp.log`):
 
 ```bash
 just install          # Tap and install from release formula
 just install-local    # Build Release binary, stage local formula, install, and restore formula
 just reinstall-local  # Stop service if running, rebuild, and reinstall local formula
-just start            # Start brew service and verify http://127.0.0.1:8082/mcp readiness
+just start            # Start brew service and verify http://127.0.0.1:10002/mcp readiness
 just stop             # Stop brew service
 just restart          # Restart brew service and verify readiness
 just status           # Inspect brew service status and probe server/discover

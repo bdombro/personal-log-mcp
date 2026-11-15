@@ -285,7 +285,7 @@ inline int run_cli(slimr::PluginApp& app, std::initializer_list<std::string_view
 TEST_CASE("enable_http CLI validation rejects non-loopback hosts, unflagged port 0, and bad flags") {
     auto db = std::make_shared<AppDb>(":memory:");
     auto app = make_personal_log_app(db);
-    slimr::enable_http(app, slimr::HttpServerOptions{.host = "127.0.0.1", .port = 8082});
+    slimr::enable_http(app, slimr::HttpServerOptions{.host = "127.0.0.1", .port = 10002});
 
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--host", "0.0.0.0"}) == 1);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--port", "0"}) == 1);

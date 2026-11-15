@@ -31,7 +31,7 @@ build: (configure "Release")
 
 tap := "bdombro/personal-log-mcp"
 formula := "bdombro/personal-log-mcp/personal-log-mcp"
-endpoint := "http://127.0.0.1:8082/mcp"
+endpoint := "http://127.0.0.1:10002/mcp"
 
 lint: (configure "Debug")
     CLANG_TIDY="${CLANG_TIDY:-clang-tidy}" && "$CLANG_TIDY" -p build/cmake/Debug src/main.cpp tests/test_main.cpp
