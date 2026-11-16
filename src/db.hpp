@@ -1,5 +1,6 @@
 #pragma once
 
+#include "brew_prefix.hpp"
 #include "json.hpp"
 #include "sqlite.hpp"
 
@@ -17,6 +18,9 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace personal_log {
 
@@ -194,15 +198,26 @@ inline std::string format_iso_now() {
     return std::string(buf);
 }
 
-/// Default database path: $PERSONAL_LOG_DB or ~/.local/share/personal-log/log.db.
+/// Default database path: $PERSONAL_LOG_DB, else $(brew --prefix)/var/personal-log-mcp/log.db in a 0700 directory.
 inline std::string defaultDbPath() {
     const char *env = std::getenv("PERSONAL_LOG_DB");
     if (env && *env)
         return std::string(env);
-    const char *home = std::getenv("HOME");
-    if (!home || !*home)
-        return "log.db";
-    return std::string(home) + "/.local/share/personal-log/log.db";
+
+    const std::string root = brew_prefix() + "/var/personal-log-mcp";
+    std::error_code ec;
+    std::filesystem::create_directories(root, ec);
+    if (ec) {
+        throw std::runtime_error("Cannot create " + root + ": " + ec.message() + "; set PERSONAL_LOG_DB");
+    }
+    struct stat st{};
+    if (lstat(root.c_str(), &st) != 0 || !S_ISDIR(st.st_mode) || st.st_uid != getuid()) {
+        throw std::runtime_error(root + " is not a private directory owned by this user; set PERSONAL_LOG_DB");
+    }
+    if (chmod(root.c_str(), 0700) != 0 || lstat(root.c_str(), &st) != 0 || (st.st_mode & 0077) != 0) {
+        throw std::runtime_error(root + " could not be restricted to mode 0700; set PERSONAL_LOG_DB");
+    }
+    return root + "/log.db";
 }
 
 /// Turns free text into a safe FTS5 query: words ANDed, "phrases" kept, OR kept, trailing * kept.

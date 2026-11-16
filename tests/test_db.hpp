@@ -8,8 +8,11 @@
 #include <algorithm>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
+
+#include <sys/stat.h>
 
 namespace personal_log::testing {
 
@@ -371,6 +374,67 @@ TEST_SUITE("app tools and resources") {
         REQUIRE(parsed.has_value());
         CHECK((*parsed)["imported"].get<int64_t>() == 2);
         CHECK(db->search(SearchFilters{}).size() == 2);
+    }
+}
+
+// ============================================================================
+// Default database path
+// ============================================================================
+struct ScopedDbEnv {
+    std::string name;
+    std::optional<std::string> previous;
+
+    ScopedDbEnv(std::string key, const std::optional<std::string> &value)
+        : name(std::move(key)) {
+        if (const char *old = std::getenv(name.c_str()))
+            previous = old;
+        if (value)
+            setenv(name.c_str(), value->c_str(), 1);
+        else
+            unsetenv(name.c_str());
+    }
+
+    ~ScopedDbEnv() {
+        if (previous)
+            setenv(name.c_str(), previous->c_str(), 1);
+        else
+            unsetenv(name.c_str());
+    }
+};
+
+TEST_SUITE("defaultDbPath") {
+    TEST_CASE("defaults to a private brew var directory") {
+        slimr::testing::TempDirGuard temp("plog_brew_");
+        ScopedDbEnv db("PERSONAL_LOG_DB", std::nullopt);
+        ScopedDbEnv prefix("HOMEBREW_PREFIX", temp.path.string() + "/");
+        const auto root = temp.path / "var" / "personal-log-mcp";
+        CHECK(defaultDbPath() == (root / "log.db").string());
+        struct stat st{};
+        REQUIRE(stat(root.c_str(), &st) == 0);
+        CHECK((st.st_mode & 0777) == 0700);
+    }
+
+    TEST_CASE("PERSONAL_LOG_DB wins and leaves its parent untouched") {
+        slimr::testing::TempDirGuard temp("plog_brew_");
+        const auto custom = temp.path / "custom" / "log.db";
+        ScopedDbEnv db("PERSONAL_LOG_DB", custom.string());
+        ScopedDbEnv prefix("HOMEBREW_PREFIX", temp.path.string());
+        CHECK(defaultDbPath() == custom.string());
+        CHECK_FALSE(std::filesystem::exists(custom.parent_path()));
+        CHECK_FALSE(std::filesystem::exists(temp.path / "var"));
+    }
+
+    TEST_CASE("restricts an existing 0755 var directory to 0700") {
+        slimr::testing::TempDirGuard temp("plog_brew_");
+        const auto root = temp.path / "var" / "personal-log-mcp";
+        std::filesystem::create_directories(root);
+        REQUIRE(chmod(root.c_str(), 0755) == 0);
+        ScopedDbEnv db("PERSONAL_LOG_DB", std::nullopt);
+        ScopedDbEnv prefix("HOMEBREW_PREFIX", temp.path.string());
+        CHECK(defaultDbPath() == (root / "log.db").string());
+        struct stat st{};
+        REQUIRE(stat(root.c_str(), &st) == 0);
+        CHECK((st.st_mode & 0777) == 0700);
     }
 }
 
