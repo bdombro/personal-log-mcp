@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v3.1.0 - 2026-11-16
+
 - Internal: remove temporary vcpkg overlay-ports and pin slimr-mcp v0.2.0 and slimr-serve v0.1.1
 - Migrate to `slimr-serve` typed tool outputs (`outputSchema`/`structuredContent` on `backup` and `mine`) and drop stdio `mcp` mode
 - Re-enable direct CLI tool calls (`personal-log-mcp <tool> '{...}'`), now opt-in since `slimr-mcp` v0.1.4
