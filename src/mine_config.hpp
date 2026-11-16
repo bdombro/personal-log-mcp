@@ -1,5 +1,6 @@
 #pragma once
 
+#include "brew_prefix.hpp"
 #include "json.hpp"
 
 #include <algorithm>
@@ -45,13 +46,7 @@ struct MineConfig {
 };
 
 inline std::filesystem::path personalLogConfigDir() {
-    if (const char *xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg) {
-        return std::filesystem::path(xdg) / "personal-log";
-    }
-    if (const char *home = std::getenv("HOME"); home && *home) {
-        return std::filesystem::path(home) / ".config/personal-log";
-    }
-    throw std::runtime_error("Set HOME or XDG_CONFIG_HOME for personal-log configuration");
+    return std::filesystem::path(brew_prefix()) / "etc" / "personal-log-mcp";
 }
 
 inline std::filesystem::path mineConfigPath() {
@@ -85,7 +80,7 @@ inline std::string suggestCalendarId(const MineConfig &config) {
 inline MineConfig loadMineConfig(const std::filesystem::path &path = mineConfigPath()) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Mining configuration is required: set PERSONAL_LOG_MINE_CONFIG or create personal-log/mine.json in your XDG config directory");
+        throw std::runtime_error("Mining configuration is required: set PERSONAL_LOG_MINE_CONFIG or create $(brew --prefix)/etc/personal-log-mcp/mine.json");
     }
     std::ostringstream content;
     content << file.rdbuf();

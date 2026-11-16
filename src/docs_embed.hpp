@@ -42,8 +42,8 @@ configured sources, destinations, retention policy and consent boundaries.
 
 ## Local customization
 
-An optional private `conventions.md` in the user's `personal-log` XDG configuration
-directory replaces this guide at resource-read time. Keep household-specific tags,
+An optional private `conventions.md` in `$(brew --prefix)/etc/personal-log-mcp/`
+replaces this guide at resource-read time. Keep household-specific tags,
 names and rules there, not in the published repository.
 )GUIDE";
 
@@ -76,8 +76,8 @@ the language likely used in the original message.
 - Say what you did not find and where you looked. Never fill gaps with guesses.
 - Format dates as `YYYY.MM.DD`.
 
-An optional private `recall.md` in the user's `personal-log` XDG configuration
-directory replaces this guide at resource-read time. Store private routing
+An optional private `recall.md` in `$(brew --prefix)/etc/personal-log-mcp/`
+replaces this guide at resource-read time. Store private routing
 instructions and note locations there rather than in public documentation.
 )GUIDE";
 

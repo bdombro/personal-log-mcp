@@ -36,15 +36,12 @@ inline void writeMineFixture(const std::filesystem::path &path, const std::strin
 }
 
 TEST_SUITE("mining configuration") {
-    TEST_CASE("selects explicit path before XDG and HOME without reading a file") {
+    TEST_CASE("selects explicit path before the brew etc directory without reading a file") {
         ScopedMineEnv path("PERSONAL_LOG_MINE_CONFIG", "/example/explicit.json");
-        ScopedMineEnv xdg("XDG_CONFIG_HOME", "/example/config");
-        ScopedMineEnv home("HOME", "/example/home");
+        ScopedMineEnv prefix("HOMEBREW_PREFIX", "/example/brew/");
         CHECK(mineConfigPath() == "/example/explicit.json");
         unsetenv("PERSONAL_LOG_MINE_CONFIG");
-        CHECK(mineConfigPath() == "/example/config/personal-log/mine.json");
-        unsetenv("XDG_CONFIG_HOME");
-        CHECK(mineConfigPath() == "/example/home/.config/personal-log/mine.json");
+        CHECK(mineConfigPath() == "/example/brew/etc/personal-log-mcp/mine.json");
     }
 
     TEST_CASE("loads configured sources and destinations with validated calendar override") {
@@ -131,10 +128,10 @@ TEST_SUITE("mining configuration") {
 
     TEST_CASE("private guides override the generic embedded resources independently of mining config") {
         slimr::testing::TempDirGuard temp("mine_guides_");
-        ScopedMineEnv xdg("XDG_CONFIG_HOME", temp.path.string());
+        ScopedMineEnv prefix("HOMEBREW_PREFIX", temp.path.string());
         ScopedMineEnv config("PERSONAL_LOG_MINE_CONFIG", (temp.path / "missing.json").string());
-        const auto directory = temp.path / "personal-log";
-        std::filesystem::create_directory(directory);
+        const auto directory = temp.path / "etc" / "personal-log-mcp";
+        std::filesystem::create_directories(directory);
         writeMineFixture(directory / "conventions.md", "# Synthetic private conventions\n");
         writeMineFixture(directory / "recall.md", "# Synthetic private recall\n");
         auto app = make_personal_log_app();

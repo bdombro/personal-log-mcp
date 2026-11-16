@@ -181,10 +181,6 @@ struct MineInput {
 // ============================================================================
 
 inline std::optional<std::string> privateGuide(std::string_view filename) {
-    const char *xdg = std::getenv("XDG_CONFIG_HOME");
-    const char *home = std::getenv("HOME");
-    if ((!xdg || !*xdg) && (!home || !*home))
-        return std::nullopt;
     const auto path = personalLogConfigDir() / filename;
     if (!std::filesystem::exists(path))
         return std::nullopt;
