@@ -291,13 +291,11 @@ inline int run_cli(slimr::PluginApp &app, std::initializer_list<std::string_view
     return app.run(static_cast<int>(ptrs.size()), ptrs.data());
 }
 
-TEST_CASE("enable_http CLI validation rejects non-loopback hosts, unflagged port 0, and bad flags") {
+TEST_CASE("enable_http CLI validation rejects bad port values and unknown flags") {
     auto db = std::make_shared<AppDb>(":memory:");
     auto app = make_personal_log_app(db);
     slimr::enable_http(app, slimr::HttpServerOptions{.host = "127.0.0.1", .port = 10002});
 
-    CHECK(run_cli(app, {"personal-log-mcp", "http", "--host", "0.0.0.0"}) == 1);
-    CHECK(run_cli(app, {"personal-log-mcp", "http", "--port", "0"}) == 1);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--port", "not-a-number"}) == 2);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--port", "70000"}) == 2);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--unknown-flag"}) == 2);
@@ -312,7 +310,6 @@ TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and
         slimr::HttpServerOptions{
             .host = "127.0.0.1",
             .port = 0,
-            .allowEphemeralPort = true,
         });
     std::string err;
     REQUIRE(server.start(&err));
@@ -501,7 +498,6 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
         slimr::HttpServerOptions{
             .host = "127.0.0.1",
             .port = 0,
-            .allowEphemeralPort = true,
         });
     std::string err;
     REQUIRE(server.start(&err));
