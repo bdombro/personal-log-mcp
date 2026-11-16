@@ -301,6 +301,12 @@ TEST_CASE("enable_http CLI validation rejects bad port values and unknown flags"
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--unknown-flag"}) == 2);
 }
 
+TEST_CASE("CLI direct tool call runs a read-only tool") {
+    auto db = std::make_shared<AppDb>(":memory:");
+    auto app = make_personal_log_app(db);
+    CHECK(run_cli(app, {"personal-log-mcp", "status"}) == 0);
+}
+
 TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and rejects legacy initialize") {
     auto db = std::make_shared<AppDb>(":memory:");
     auto app = make_personal_log_app(db);

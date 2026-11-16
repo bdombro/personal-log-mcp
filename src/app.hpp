@@ -202,6 +202,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.description = "A personal log in SQLite: search, timeline and edits over MCP, plus configurable scheduled mining.";
     app.instructions = std::string(MCP_INSTRUCTIONS);
     app.setBugsink("", "BUGSINK_DSN", "personal-log-mcp@" + std::string(APP_VERSION));
+    app.allowCliTools = true;
 
     // Embedded and file-fallback resources
     app.resources.push_back(slimr::Resource{

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Re-enable direct CLI tool calls (`personal-log-mcp <tool> '{...}'`), now opt-in since `slimr-mcp` v0.1.4
 - Internal: replace `slimr-curl`/`libhv` with `cpp-httplib` and upgrade `slimr-mcp` / `slimr-bugsink`
 - Internal: switch macOS builds to llvm@23 and static libc++
 
