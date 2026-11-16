@@ -298,7 +298,9 @@ TEST_SUITE("app tools and resources") {
         auto req = make_mcp_req(1, "tools/call", std::move(statusParams));
         auto resp = app.dispatchMcpJson(req);
         CHECK(!resp.contains("error"));
-        CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("2.0.0") != std::string::npos);
+        CHECK(resp["result"]["content"][0]["text"].get<std::string>().find(PERSONAL_LOG_APP_VERSION) != std::string::npos);
+        REQUIRE(app.bugsink() != nullptr);
+        CHECK(app.bugsink()->release() == std::string("personal-log-mcp@") + PERSONAL_LOG_APP_VERSION);
 
         // Schema tool call
         req["id"] = 2;

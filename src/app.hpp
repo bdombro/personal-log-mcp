@@ -24,7 +24,10 @@
 
 namespace personal_log {
 
-inline constexpr std::string_view APP_VERSION = "2.0.0";
+#ifndef PERSONAL_LOG_APP_VERSION
+#error "PERSONAL_LOG_APP_VERSION must come from CMake (VERSION)"
+#endif
+inline constexpr std::string_view APP_VERSION = PERSONAL_LOG_APP_VERSION;
 inline constexpr std::string_view MCP_INSTRUCTIONS =
     "A personal log of dated events, tagged by person and topic. "
     "Use `search` for when/what/how-often questions, `sql` (after `schema`) for counts. For any personal-memory question, "
@@ -198,7 +201,7 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     slimr::PluginApp app("personal-log-mcp", std::string(APP_VERSION));
     app.description = "A personal log in SQLite: search, timeline and edits over MCP, plus configurable scheduled mining.";
     app.instructions = std::string(MCP_INSTRUCTIONS);
-    app.setBugsink("");
+    app.setBugsink("", "BUGSINK_DSN", "personal-log-mcp@" + std::string(APP_VERSION));
 
     // Embedded and file-fallback resources
     app.resources.push_back(slimr::Resource{

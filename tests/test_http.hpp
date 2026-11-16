@@ -332,6 +332,7 @@ TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and
     }
     CHECK(hasProtocol);
     CHECK((*discJson)["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"].get<std::string>() == "personal-log-mcp");
+    CHECK((*discJson)["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["version"].get<std::string>() == PERSONAL_LOG_APP_VERSION);
 
     // 2. tools/list
     auto listReply = post_mcp(port, make_mcp_req(2, "tools/list"));
@@ -360,7 +361,7 @@ TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and
         auto j = slimr::parse_json<slimr::Json>(r.body);
         REQUIRE(j.has_value());
         CHECK(!j->contains("error"));
-        CHECK((*j)["result"]["content"][0]["text"].get<std::string>().find("2.0.0") != std::string::npos);
+        CHECK((*j)["result"]["content"][0]["text"].get<std::string>().find(PERSONAL_LOG_APP_VERSION) != std::string::npos);
     }
     {
         slimr::Json entry = slimr::json_obj();

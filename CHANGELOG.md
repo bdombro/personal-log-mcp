@@ -8,3 +8,4 @@
 - Move default database from ~/.local/share/personal-log to $(brew --prefix)/var/personal-log-mcp (mode 0700)
 - Read mining config and private guides from $(brew --prefix)/etc/personal-log-mcp instead of ~/.config/personal-log
 - Bind HTTP server to 0.0.0.0:10002 by default (pass --host 127.0.0.1 for loopback-only)
+- Embed VERSION into binary and tag Bugsink events with personal-log-mcp@<version>
