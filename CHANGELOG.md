@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Internal: switch macOS builds to llvm@23 and static libc++
+
 ## v3.0.0 - 2026-11-16
 
 - Internal: align build, CI, Homebrew formula, and documentation with cpp-templates

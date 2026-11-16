@@ -132,7 +132,7 @@ Build with Clang/C++26 and libc++ FAST hardening, CMake 3.31+, Ninja, [just](htt
 
 `just configure`, `test`, `build`, and `lint` automatically run `deps`, installing manifest dependencies under `build/deps/`. CMake uses installed `slimr::mcp_http` (`slimr-mcp[http]`) and `slimr::sqlite` targets with static SQLite/FTS5; manifest auto-install is disabled.
 
-Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. macOS builds use Apple clang (`/usr/bin/clang++`) with a 15.0 deployment floor; Linux builds use `llvm@23` clang++ with libc++. `CXX` overrides both; set it before the first configure, since CMake caches the compiler. Set `LLVM_BIN` to override the `llvm@23` binary directory for `clang-format` and `clang-tidy`. CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME, `HOMEBREW_PREFIX` and temporary directories.
+Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. macOS builds use `llvm@23` clang++ with static `libc++` and a 15.0 deployment floor; Linux builds use `llvm@23` clang++ with `libc++`. `CXX` overrides both; set it before the first configure, since CMake caches the compiler. Set `LLVM_BIN` to override the `llvm@23` binary directory for `clang-format` and `clang-tidy`. CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME, `HOMEBREW_PREFIX` and temporary directories.
 
 ```bash
 just doctor   # Check required tools and C++26 support
