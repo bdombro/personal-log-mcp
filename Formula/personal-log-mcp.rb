@@ -2,16 +2,16 @@ class PersonalLogMcp < Formula
   desc "SQLite + FTS5 personal family log MCP server and CLI"
   homepage "https://github.com/bdombro/personal-log-mcp"
   license "ISC"
-  version "2.0.0"
+  version "3.0.0"
 
   on_macos do
-    url "https://github.com/bdombro/personal-log-mcp/releases/download/v2.0.0/personal-log-mcp-arm64-macos.tar.gz"
-    sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+    url "https://github.com/bdombro/personal-log-mcp/releases/download/v3.0.0/personal-log-mcp-arm64-macos.tar.gz"
+    sha256 "21e5f2fcb4fc39c466d6dc4b40a9e0a626548d63d7833880bac41f2b0310127a"
   end
 
   on_linux do
-    url "https://github.com/bdombro/personal-log-mcp/releases/download/v2.0.0/personal-log-mcp-x64-linux.tar.gz"
-    sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+    url "https://github.com/bdombro/personal-log-mcp/releases/download/v3.0.0/personal-log-mcp-x64-linux.tar.gz"
+    sha256 "abae8bef78fff2e444e2dabf4cb5e5dd56d95f42456da8cdc9a421dace8ee235"
   end
 
   def install
