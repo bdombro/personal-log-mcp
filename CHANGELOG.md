@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Internal: replace `slimr-curl`/`libhv` with `cpp-httplib` and upgrade `slimr-mcp` / `slimr-bugsink`
 - Internal: switch macOS builds to llvm@23 and static libc++
 
 ## v3.0.0 - 2026-11-16

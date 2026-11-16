@@ -53,11 +53,11 @@ personal-log-mcp/
 
 ### Libraries Used
 
-- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), narrow JSON CLI, and Streamable HTTP server (`libhv`).
+- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), narrow JSON CLI, and Streamable HTTP server (`cpp-httplib`).
 - **`<sqlite.hpp>` (`-lsqlite3`):** WAL mode + `synchronous=NORMAL` (for file-backed DBs), per-`AppDb` mutex across transactions and 256-statement LRU cache, FTS5 (`entries_fts`), nested savepoints (`merge`), `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON` for `sql`), and online `sqlite3_backup_init` (`backup`).
-- **`<curl.hpp>` (`-lcurl`):** LLM calls (DeepSeek, Gemini AI Studio) with retry/backoff (`fetchWithRetry`).
+- **`<httplib.h>` (`cpp-httplib[openssl]`):** HTTP client with retry/backoff (`fetchWithRetry`).
 - **`<json.hpp>` (`glaze`):** Fast JSON serialization and LLM structured output parsing.
-- **`<bugsink.hpp>` (`-lcurl`):** Automatic error and fallback warning reporting to an explicitly configured Bugsink endpoint (with PII scrubbed via `scrub()`).
+- **`<bugsink.hpp>` (`cpp-httplib[openssl]`):** Automatic error and fallback warning reporting to an explicitly configured Bugsink endpoint (with PII scrubbed via `scrub()`).
 - **`<test.hpp>` (`doctest`):** Full unit and pipeline test suite compiled with `-fsanitize=address,undefined`.
 
 ## Transports & Client Configuration

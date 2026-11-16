@@ -1,10 +1,11 @@
 #pragma once
 
-#include "curl.hpp"
 #include "db.hpp"
 #include "json.hpp"
 #include "mine_config.hpp"
 #include "sqlite.hpp"
+
+#include <httplib.h>
 
 #include <algorithm>
 #include <atomic>
@@ -534,22 +535,85 @@ inline std::optional<std::string> sanitizeContact(const std::optional<std::strin
     return std::nullopt;
 }
 
+struct HttpRequest {
+    std::string method = "POST";
+    std::string url;
+    std::map<std::string, std::string> headers;
+    std::string body;
+    long timeoutMs = 10000;
+};
+
+struct HttpResponse {
+    int status = 0;
+    std::map<std::string, std::string> headers;
+    std::string body;
+};
+
 /// POST with per-attempt timeout, retrying 429 and 5xx.
-inline slimr::HttpResponse fetchWithRetry(
+inline HttpResponse fetchWithRetry(
     const std::string &url,
-    const slimr::HttpRequest &init,
+    const HttpRequest &init,
     long timeoutMs = 10000,
     const std::vector<long> &delaysMs = {20000, 60000}) {
+    const auto schemeEnd = url.find("://");
+    if (schemeEnd == std::string::npos) {
+        throw std::runtime_error("Invalid URL");
+    }
+    const auto pathStart = url.find('/', schemeEnd + 3);
+    const std::string baseUrl = pathStart == std::string::npos ? url : url.substr(0, pathStart);
+    const std::string path = pathStart == std::string::npos ? "/" : url.substr(pathStart);
+
     for (size_t attempt = 0;; ++attempt) {
-        slimr::HttpRequest req = init;
-        req.url = url;
-        req.timeoutMs = timeoutMs;
         try {
-            slimr::HttpResponse res = slimr::request(req);
-            if ((res.status == 429 || res.status >= 500) && attempt < delaysMs.size()) {
+            httplib::Client cli(baseUrl);
+            if (!cli.is_valid()) {
+                throw std::runtime_error("Invalid HTTP client");
+            }
+            const long clampedMs = std::max<long>(0, timeoutMs);
+            const auto sec = static_cast<time_t>(clampedMs / 1000);
+            const auto usec = static_cast<time_t>((clampedMs % 1000) * 1000);
+            cli.set_connection_timeout(sec, usec);
+            cli.set_read_timeout(sec, usec);
+            cli.set_write_timeout(sec, usec);
+
+            httplib::Headers hdrs;
+            std::string contentType = "application/json";
+            for (const auto &[k, v] : init.headers) {
+                if (k == "Content-Type" || k == "content-type") {
+                    contentType = v;
+                } else {
+                    hdrs.emplace(k, v);
+                }
+            }
+
+            httplib::Result res = [&]() {
+                if (init.method == "GET") {
+                    return cli.Get(path, hdrs);
+                }
+                if (init.method == "PUT") {
+                    return cli.Put(path, hdrs, init.body, contentType);
+                }
+                if (init.method == "PATCH") {
+                    return cli.Patch(path, hdrs, init.body, contentType);
+                }
+                if (init.method == "DELETE") {
+                    return cli.Delete(path, hdrs, init.body, contentType);
+                }
+                return cli.Post(path, hdrs, init.body, contentType);
+            }();
+            if (!res) {
+                throw std::runtime_error("HTTP request failed: " + httplib::to_string(res.error()));
+            }
+            if ((res->status == 429 || res->status >= 500) && attempt < delaysMs.size()) {
                 // Retry
             } else {
-                return res;
+                HttpResponse out;
+                out.status = res->status;
+                out.body = res->body;
+                for (const auto &[k, v] : res->headers) {
+                    out.headers.emplace(k, v);
+                }
+                return out;
             }
         } catch (...) {
             if (attempt >= delaysMs.size()) {

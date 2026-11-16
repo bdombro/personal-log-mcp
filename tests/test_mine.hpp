@@ -152,7 +152,7 @@ TEST_SUITE("fetchWithRetry") {
             }
             return "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
         });
-        slimr::HttpRequest req;
+        HttpRequest req;
         req.method = "POST";
         auto res = fetchWithRetry("http://127.0.0.1:" + std::to_string(srv.port) + "/", req, 5000, {1, 1});
         CHECK(res.status == 200);
@@ -161,7 +161,7 @@ TEST_SUITE("fetchWithRetry") {
     }
 
     TEST_CASE("fetchWithRetry gives up after the last attempt on network errors") {
-        slimr::HttpRequest req;
+        HttpRequest req;
         req.method = "POST";
         CHECK_THROWS(fetchWithRetry("http://127.0.0.1:1/", req, 2000, {1, 1}));
     }
@@ -172,7 +172,7 @@ TEST_SUITE("fetchWithRetry") {
             hits.store(h);
             return "HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\n\r\nno";
         });
-        slimr::HttpRequest req;
+        HttpRequest req;
         req.method = "POST";
         auto res = fetchWithRetry("http://127.0.0.1:" + std::to_string(srv.port) + "/", req, 5000, {1, 1});
         CHECK(res.status == 401);
