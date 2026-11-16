@@ -34,16 +34,16 @@ struct HttpReply {
 };
 
 class TcpFd {
-public:
+  public:
     TcpFd() = default;
     explicit TcpFd(int fd) noexcept : fd_(fd) {}
     ~TcpFd() { reset(); }
 
-    TcpFd(const TcpFd&) = delete;
-    TcpFd& operator=(const TcpFd&) = delete;
+    TcpFd(const TcpFd &) = delete;
+    TcpFd &operator=(const TcpFd &) = delete;
 
-    TcpFd(TcpFd&& other) noexcept : fd_(std::exchange(other.fd_, -1)) {}
-    TcpFd& operator=(TcpFd&& other) noexcept {
+    TcpFd(TcpFd &&other) noexcept : fd_(std::exchange(other.fd_, -1)) {}
+    TcpFd &operator=(TcpFd &&other) noexcept {
         if (this != &other) {
             reset();
             fd_ = std::exchange(other.fd_, -1);
@@ -61,13 +61,14 @@ public:
         }
     }
 
-private:
+  private:
     int fd_ = -1;
 };
 
 inline TcpFd connect_loopback(uint16_t port) {
     int raw = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (raw < 0) return {};
+    if (raw < 0)
+        return {};
     TcpFd fd(raw);
 
     struct timeval tv{};
@@ -82,7 +83,7 @@ inline TcpFd connect_loopback(uint16_t port) {
     if (::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) != 1) {
         return {};
     }
-    if (::connect(fd.get(), reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
+    if (::connect(fd.get(), reinterpret_cast<const sockaddr *>(&addr), sizeof(addr)) != 0) {
         return {};
     }
     return fd;
@@ -93,10 +94,12 @@ inline bool send_all(int fd, std::string_view data) {
     while (sent < data.size()) {
         ssize_t n = ::send(fd, data.data() + sent, data.size() - sent, 0);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             return false;
         }
-        if (n == 0) return false;
+        if (n == 0)
+            return false;
         sent += static_cast<size_t>(n);
     }
     return true;
@@ -104,7 +107,7 @@ inline bool send_all(int fd, std::string_view data) {
 
 inline std::string ascii_lower(std::string_view s) {
     std::string out(s);
-    for (char& ch : out) {
+    for (char &ch : out) {
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     }
     return out;
@@ -125,10 +128,12 @@ inline std::string decode_chunked_body(std::string_view raw) {
     size_t pos = 0;
     while (pos < raw.size()) {
         size_t lineEnd = raw.find("\r\n", pos);
-        if (lineEnd == std::string_view::npos) break;
+        if (lineEnd == std::string_view::npos)
+            break;
         std::string sizeHex(raw.substr(pos, lineEnd - pos));
         size_t semi = sizeHex.find(';');
-        if (semi != std::string::npos) sizeHex.resize(semi);
+        if (semi != std::string::npos)
+            sizeHex.resize(semi);
         size_t chunkLen = 0;
         try {
             chunkLen = static_cast<size_t>(std::stoul(sizeHex, nullptr, 16));
@@ -136,8 +141,10 @@ inline std::string decode_chunked_body(std::string_view raw) {
             break;
         }
         pos = lineEnd + 2;
-        if (chunkLen == 0) break;
-        if (pos + chunkLen > raw.size()) break;
+        if (chunkLen == 0)
+            break;
+        if (pos + chunkLen > raw.size())
+            break;
         decoded.append(raw.substr(pos, chunkLen));
         pos += chunkLen;
         if (pos + 2 <= raw.size() && raw.substr(pos, 2) == "\r\n") {
@@ -152,8 +159,7 @@ inline HttpReply http_exchange(
     std::string_view method,
     std::string_view path,
     std::string_view body = "",
-    const std::vector<std::pair<std::string, std::string>>& extraHeaders = {}
-) {
+    const std::vector<std::pair<std::string, std::string>> &extraHeaders = {}) {
     HttpReply reply;
     TcpFd fd = connect_loopback(port);
     REQUIRE(fd.valid());
@@ -168,7 +174,7 @@ inline HttpReply http_exchange(
     req += std::to_string(port);
     req += "\r\n";
     req += "Connection: close\r\n";
-    for (const auto& [k, v] : extraHeaders) {
+    for (const auto &[k, v] : extraHeaders) {
         req += k;
         req += ": ";
         req += v;
@@ -189,10 +195,12 @@ inline HttpReply http_exchange(
     while (true) {
         ssize_t n = ::recv(fd.get(), buf.data(), buf.size(), 0);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             break;
         }
-        if (n == 0) break;
+        if (n == 0)
+            break;
         raw.append(buf.data(), static_cast<size_t>(n));
     }
 
@@ -209,8 +217,8 @@ inline HttpReply http_exchange(
     REQUIRE(sp1 != std::string_view::npos);
     size_t sp2 = statusLine.find(' ', sp1 + 1);
     std::string_view codeStr = (sp2 == std::string_view::npos)
-        ? statusLine.substr(sp1 + 1)
-        : statusLine.substr(sp1 + 1, sp2 - (sp1 + 1));
+                                   ? statusLine.substr(sp1 + 1)
+                                   : statusLine.substr(sp1 + 1, sp2 - (sp1 + 1));
     reply.status = std::stoi(std::string(codeStr));
 
     if (firstLineEnd != std::string_view::npos) {
@@ -224,7 +232,8 @@ inline HttpReply http_exchange(
                 reply.headers[ascii_lower(trim_ows(line.substr(0, colon)))] =
                     trim_ows(line.substr(colon + 1));
             }
-            if (next == std::string_view::npos) break;
+            if (next == std::string_view::npos)
+                break;
             cur = next + 2;
         }
     }
@@ -245,7 +254,7 @@ inline HttpReply http_exchange(
     return reply;
 }
 
-inline HttpReply post_mcp(uint16_t port, const slimr::Json& req) {
+inline HttpReply post_mcp(uint16_t port, const slimr::Json &req) {
     auto dumped = req.dump();
     REQUIRE(dumped.has_value());
     std::vector<std::pair<std::string, std::string>> headers{
@@ -257,7 +266,7 @@ inline HttpReply post_mcp(uint16_t port, const slimr::Json& req) {
         std::string method = req["method"].get<std::string>();
         headers.emplace_back("Mcp-Method", method);
         if (req.contains("params") && req["params"].is_object()) {
-            const auto& params = req["params"];
+            const auto &params = req["params"];
             if (method == "tools/call" && params.contains("name") && params["name"].is_string()) {
                 headers.emplace_back("Mcp-Name", params["name"].get<std::string>());
             } else if (method == "resources/read" && params.contains("uri") && params["uri"].is_string()) {
@@ -268,15 +277,15 @@ inline HttpReply post_mcp(uint16_t port, const slimr::Json& req) {
     return http_exchange(port, "POST", "/mcp", *dumped, headers);
 }
 
-inline int run_cli(slimr::PluginApp& app, std::initializer_list<std::string_view> args) {
+inline int run_cli(slimr::PluginApp &app, std::initializer_list<std::string_view> args) {
     std::vector<std::string> owned;
     owned.reserve(args.size());
     for (std::string_view a : args) {
         owned.emplace_back(a);
     }
-    std::vector<char*> ptrs;
+    std::vector<char *> ptrs;
     ptrs.reserve(owned.size());
-    for (std::string& s : owned) {
+    for (std::string &s : owned) {
         ptrs.push_back(s.data());
     }
     return app.run(static_cast<int>(ptrs.size()), ptrs.data());
@@ -304,8 +313,7 @@ TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and
             .host = "127.0.0.1",
             .port = 0,
             .allowEphemeralPort = true,
-        }
-    );
+        });
     std::string err;
     REQUIRE(server.start(&err));
     uint16_t port = server.boundPort();
@@ -317,10 +325,10 @@ TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and
     auto discJson = slimr::parse_json<slimr::Json>(discReply.body);
     REQUIRE(discJson.has_value());
     CHECK(!discJson->contains("error"));
-    const auto& supported = (*discJson)["result"]["supportedVersions"];
+    const auto &supported = (*discJson)["result"]["supportedVersions"];
     REQUIRE(supported.is_array());
     bool hasProtocol = false;
-    for (const auto& v : supported.get_array()) {
+    for (const auto &v : supported.get_array()) {
         if (v.is_string() && v.get<std::string>() == "2026-07-28") {
             hasProtocol = true;
         }
@@ -333,10 +341,10 @@ TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and
     CHECK(listReply.status == 200);
     auto listJson = slimr::parse_json<slimr::Json>(listReply.body);
     REQUIRE(listJson.has_value());
-    const auto& tools = (*listJson)["result"]["tools"];
+    const auto &tools = (*listJson)["result"]["tools"];
     REQUIRE(tools.is_array());
     std::vector<std::string> names;
-    for (const auto& t : tools.get_array()) {
+    for (const auto &t : tools.get_array()) {
         names.push_back(t["name"].get<std::string>());
     }
     for (std::string_view expected : {
@@ -424,18 +432,18 @@ TEST_CASE("file-backed AppDb enables WAL and synchronous=NORMAL and serializes c
 
     std::string journalMode;
     int syncMode = -1;
-    db->withLock([&](slimr::SqliteDb& sqlDb) {
+    db->withLock([&](slimr::SqliteDb &sqlDb) {
         {
-            sqlite3_stmt* raw = nullptr;
+            sqlite3_stmt *raw = nullptr;
             REQUIRE(sqlite3_prepare_v2(sqlDb.handle(), "PRAGMA journal_mode;", -1, &raw, nullptr) == SQLITE_OK);
             std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> stmt(raw, &sqlite3_finalize);
             REQUIRE(sqlite3_step(stmt.get()) == SQLITE_ROW);
-            const unsigned char* txt = sqlite3_column_text(stmt.get(), 0);
+            const unsigned char *txt = sqlite3_column_text(stmt.get(), 0);
             REQUIRE(txt != nullptr);
-            journalMode = reinterpret_cast<const char*>(txt);
+            journalMode = reinterpret_cast<const char *>(txt);
         }
         {
-            sqlite3_stmt* raw = nullptr;
+            sqlite3_stmt *raw = nullptr;
             REQUIRE(sqlite3_prepare_v2(sqlDb.handle(), "PRAGMA synchronous;", -1, &raw, nullptr) == SQLITE_OK);
             std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> stmt(raw, &sqlite3_finalize);
             REQUIRE(sqlite3_step(stmt.get()) == SQLITE_ROW);
@@ -443,7 +451,7 @@ TEST_CASE("file-backed AppDb enables WAL and synchronous=NORMAL and serializes c
         }
     });
     CHECK(journalMode == "wal");
-    CHECK(syncMode == 1);  // NORMAL
+    CHECK(syncMode == 1); // NORMAL
 
     constexpr int kThreads = 6;
     constexpr int kPerThread = 15;
@@ -457,8 +465,7 @@ TEST_CASE("file-backed AppDb enables WAL and synchronous=NORMAL and serializes c
                     NewEntry e = make_entry(
                         "2030.07.01",
                         "Concurrent entry t" + std::to_string(t) + " i" + std::to_string(i),
-                        {"concurrency"}
-                    );
+                        {"concurrency"});
                     auto added = db->add({std::move(e)});
                     if (added.added.size() != 1) {
                         failures.fetch_add(1);
@@ -474,7 +481,8 @@ TEST_CASE("file-backed AppDb enables WAL and synchronous=NORMAL and serializes c
             }
         });
     }
-    for (auto& w : workers) w.join();
+    for (auto &w : workers)
+        w.join();
 
     CHECK(failures.load() == 0);
     auto countRes = db->sql("SELECT COUNT(*) AS cnt FROM entries");
@@ -494,8 +502,7 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
             .host = "127.0.0.1",
             .port = 0,
             .allowEphemeralPort = true,
-        }
-    );
+        });
     std::string err;
     REQUIRE(server.start(&err));
     uint16_t port = server.boundPort();
@@ -524,8 +531,7 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
                         slimr::Json p = slimr::json_obj();
                         p["name"] = "sql";
                         p["arguments"] = slimr::Json::object_t{
-                            {"query", "SELECT COUNT(*) AS cnt FROM entries"}
-                        };
+                            {"query", "SELECT COUNT(*) AS cnt FROM entries"}};
                         reply = post_mcp(port, make_mcp_req(id, "tools/call", std::move(p)));
                     } else {
                         slimr::Json entry = slimr::json_obj();
@@ -535,8 +541,7 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
                         slimr::Json p = slimr::json_obj();
                         p["name"] = "add";
                         p["arguments"] = slimr::Json::object_t{
-                            {"entries", slimr::Json::array_t{entry}}
-                        };
+                            {"entries", slimr::Json::array_t{entry}}};
                         reply = post_mcp(port, make_mcp_req(id, "tools/call", std::move(p)));
                     }
                     if (reply.status != 200) {
@@ -553,7 +558,8 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
             }
         });
     }
-    for (auto& client : clients) client.join();
+    for (auto &client : clients)
+        client.join();
     server.stop();
 
     CHECK(failures.load() == 0);
@@ -563,4 +569,4 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
     CHECK(countRes.rows[0].at("cnt").get<int64_t>() == 1 + kClients * 2);
 }
 
-}  // namespace personal_log::testing
+} // namespace personal_log::testing

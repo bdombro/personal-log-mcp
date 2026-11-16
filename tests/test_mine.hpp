@@ -1,21 +1,21 @@
 #pragma once
 
-#include "mine.hpp"
 #include "db.hpp"
+#include "mine.hpp"
 #include "test.hpp"
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <thread>
-#include <atomic>
-#include <regex>
-#include <cstdlib>
-#include <string>
-#include <vector>
-#include <map>
-#include <set>
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
+#include <map>
+#include <netinet/in.h>
+#include <regex>
+#include <set>
+#include <string>
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 
 namespace personal_log::testing {
 
@@ -29,7 +29,7 @@ struct TestHttpServer {
     std::thread worker;
     std::atomic<bool> stop_flag{false};
 
-    TestHttpServer(std::function<std::string(int hit, const std::string& req)> handler) {
+    TestHttpServer(std::function<std::string(int hit, const std::string &req)> handler) {
         server_fd = ::socket(AF_INET, SOCK_STREAM, 0);
         REQUIRE(server_fd >= 0);
         int opt = 1;
@@ -38,9 +38,9 @@ struct TestHttpServer {
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         addr.sin_port = 0;
-        REQUIRE(::bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) == 0);
+        REQUIRE(::bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) == 0);
         socklen_t len = sizeof(addr);
-        REQUIRE(::getsockname(server_fd, (struct sockaddr*)&addr, &len) == 0);
+        REQUIRE(::getsockname(server_fd, (struct sockaddr *)&addr, &len) == 0);
         port = ntohs(addr.sin_port);
         REQUIRE(::listen(server_fd, 10) == 0);
 
@@ -54,11 +54,13 @@ struct TestHttpServer {
                 FD_ZERO(&rfds);
                 FD_SET(server_fd, &rfds);
                 int sel = ::select(server_fd + 1, &rfds, nullptr, nullptr, &tv);
-                if (sel <= 0) continue;
+                if (sel <= 0)
+                    continue;
                 sockaddr_in client_addr{};
                 socklen_t client_len = sizeof(client_addr);
-                int client_fd = ::accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
-                if (client_fd < 0) continue;
+                int client_fd = ::accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+                if (client_fd < 0)
+                    continue;
                 hit++;
                 char buf[1024];
                 ssize_t n = ::read(client_fd, buf, sizeof(buf) - 1);
@@ -72,8 +74,10 @@ struct TestHttpServer {
 
     ~TestHttpServer() {
         stop_flag.store(true);
-        if (worker.joinable()) worker.join();
-        if (server_fd >= 0) ::close(server_fd);
+        if (worker.joinable())
+            worker.join();
+        if (server_fd >= 0)
+            ::close(server_fd);
     }
 };
 
@@ -82,7 +86,7 @@ struct TestHttpServer {
 // ============================================================================
 TEST_SUITE("modelFor") {
     TEST_CASE("modelFor: triage uses the fast model, other steps the default; env overrides; fallbacks") {
-        const std::vector<const char*> names = {
+        const std::vector<const char *> names = {
             "ASSISTANT_LLM_DEFAULT",
             "ASSISTANT_LLM_FAST",
             "ASSISTANT_LLM_DEFAULT_FALLBACK",
@@ -90,17 +94,19 @@ TEST_SUITE("modelFor") {
         };
         std::map<std::string, std::optional<std::string>> saved;
         for (auto name : names) {
-            const char* v = std::getenv(name);
+            const char *v = std::getenv(name);
             saved[name] = v ? std::optional<std::string>(v) : std::nullopt;
             unsetenv(name);
         }
 
         struct RestoreEnv {
-            std::map<std::string, std::optional<std::string>>& s;
+            std::map<std::string, std::optional<std::string>> &s;
             ~RestoreEnv() {
-                for (const auto& [k, v] : s) {
-                    if (v) setenv(k.c_str(), v->c_str(), 1);
-                    else unsetenv(k.c_str());
+                for (const auto &[k, v] : s) {
+                    if (v)
+                        setenv(k.c_str(), v->c_str(), 1);
+                    else
+                        unsetenv(k.c_str());
                 }
             }
         } restore{saved};
@@ -139,7 +145,7 @@ TEST_SUITE("modelFor") {
 TEST_SUITE("fetchWithRetry") {
     TEST_CASE("fetchWithRetry retries 5xx then returns the success") {
         std::atomic<int> hits{0};
-        TestHttpServer srv([&](int h, const std::string&) -> std::string {
+        TestHttpServer srv([&](int h, const std::string &) -> std::string {
             hits.store(h);
             if (h < 3) {
                 return "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 4\r\n\r\nbusy";
@@ -162,7 +168,7 @@ TEST_SUITE("fetchWithRetry") {
 
     TEST_CASE("fetchWithRetry returns 4xx without retrying") {
         std::atomic<int> hits{0};
-        TestHttpServer srv([&](int h, const std::string&) -> std::string {
+        TestHttpServer srv([&](int h, const std::string &) -> std::string {
             hits.store(h);
             return "HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\n\r\nno";
         });
@@ -185,8 +191,7 @@ TEST_SUITE("childEnv") {
             {"HOME", "/h"},
             {"DEEPSEEK_API_KEY", "secret"},
             {"JEV_API_KEY", "s2"},
-            {"GWS_PROFILE", "p"}
-        };
+            {"GWS_PROFILE", "p"}};
         auto empty = childEnv({}, source);
         CHECK(empty.size() == 2);
         CHECK(empty["PATH"] == "/bin");
@@ -255,9 +260,8 @@ TEST_SUITE("sanitizers") {
         CHECK(sanitizeContact("", warnings) == std::nullopt);
 
         std::vector<std::string> bad = {
-            "people/c12x", "people/12", "https://x.example", "people/c1\nmore", "contacts/c1"
-        };
-        for (const auto& b : bad) {
+            "people/c12x", "people/12", "https://x.example", "people/c1\nmore", "contacts/c1"};
+        for (const auto &b : bad) {
             CHECK(sanitizeContact(b, warnings) == std::nullopt);
         }
         CHECK(warnings.size() == 5);
@@ -334,8 +338,7 @@ inline ExpenseRow make_expense_row(
     std::string item = "OT session",
     double amount = 120.0,
     std::string qualifies = "ask",
-    std::string source = "[✉️](https://mail.google.com/mail/u/?authuser=alex@example.com#all/t9)"
-) {
+    std::string source = "[✉️](https://mail.google.com/mail/u/?authuser=alex@example.com#all/t9)") {
     return ExpenseRow{
         .date = std::move(date),
         .who = std::move(who),
@@ -343,8 +346,7 @@ inline ExpenseRow make_expense_row(
         .item = std::move(item),
         .amount = amount,
         .qualifies = std::move(qualifies),
-        .source = std::move(source)
-    };
+        .source = std::move(source)};
 }
 
 TEST_SUITE("addExpenseRows") {
@@ -357,13 +359,17 @@ TEST_SUITE("addExpenseRows") {
         std::vector<std::string> lines;
         std::istringstream ss(res.content);
         std::string l;
-        while (std::getline(ss, l)) lines.push_back(l);
+        while (std::getline(ss, l))
+            lines.push_back(l);
 
         int idx_added = -1, idx_before = -1, idx_after = -1;
         for (int i = 0; i < (int)lines.size(); ++i) {
-            if (lines[i].starts_with("| 2030.11.05 | Riley | Example Clinic")) idx_added = i;
-            if (lines[i].starts_with("| 2030.10.22")) idx_before = i;
-            if (lines[i].starts_with("| 2030.11.20")) idx_after = i;
+            if (lines[i].starts_with("| 2030.11.05 | Riley | Example Clinic"))
+                idx_added = i;
+            if (lines[i].starts_with("| 2030.10.22"))
+                idx_before = i;
+            if (lines[i].starts_with("| 2030.11.20"))
+                idx_after = i;
         }
         CHECK(idx_added > idx_before);
         CHECK(idx_added < idx_after);
@@ -391,12 +397,15 @@ TEST_SUITE("addExpenseRows") {
         std::vector<std::string> lines;
         std::istringstream ss(res.content);
         std::string l;
-        while (std::getline(ss, l)) lines.push_back(l);
+        while (std::getline(ss, l))
+            lines.push_back(l);
 
         int idx_2031 = -1, idx_2030 = -1;
         for (int i = 0; i < (int)lines.size(); ++i) {
-            if (lines[i].starts_with("## 2031")) idx_2031 = i;
-            if (lines[i].starts_with("## 2030")) idx_2030 = i;
+            if (lines[i].starts_with("## 2031"))
+                idx_2031 = i;
+            if (lines[i].starts_with("## 2030"))
+                idx_2030 = i;
         }
         CHECK(idx_2031 < idx_2030);
 
@@ -442,7 +451,7 @@ TEST_SUITE("prune") {
             }
         }
         auto gone = prune(files);
-        CHECK(files.size() - gone.size() == 34); // 30 newest plus newest of Jan-Apr
+        CHECK(files.size() - gone.size() == 34);                                          // 30 newest plus newest of Jan-Apr
         CHECK(std::find(gone.begin(), gone.end(), "log-2030-01-28.db.gz") == gone.end()); // newest of Jan kept
         CHECK(std::find(gone.begin(), gone.end(), "log-2030-01-01.db.gz") != gone.end());
     }
@@ -479,22 +488,23 @@ inline World newWorld() {
 }
 
 class FollowUpToolsRunner : public ToolRunner {
-public:
-    World& world;
+  public:
+    World &world;
     slimr::Json triageExtra;
-    std::function<slimr::Json(const std::string&, const std::string&, const std::string&, const std::string&)> customDriveUpload;
+    std::function<slimr::Json(const std::string &, const std::string &, const std::string &, const std::string &)> customDriveUpload;
 
-    FollowUpToolsRunner(World& w, slimr::Json te = slimr::Json::object_t{})
+    FollowUpToolsRunner(World &w, slimr::Json te = slimr::Json::object_t{})
         : world(w), triageExtra(std::move(te)) {}
 
-    slimr::Json google(const slimr::Json& req) override {
+    slimr::Json google(const slimr::Json &req) override {
         world.google.push_back(req);
         std::string service = req.contains("service") ? req.at("service").get<std::string>() : "";
         std::string method = req.contains("method") ? req.at("method").get<std::string>() : "";
         std::string resStr;
         if (req.contains("resource") && req.at("resource").is_array()) {
             for (size_t i = 0; i < req.at("resource").get<slimr::Json::array_t>().size(); ++i) {
-                if (i > 0) resStr += ".";
+                if (i > 0)
+                    resStr += ".";
                 resStr += req.at("resource").get<slimr::Json::array_t>()[i].get<std::string>();
             }
         }
@@ -504,33 +514,26 @@ public:
         if (key == "gmail.users.messages.list") {
             return slimr::Json{
                 {"pages", slimr::Json::array_t{
-                    slimr::Json{{"messages", slimr::Json::array_t{
-                        slimr::Json{{"id", "m1"}, {"threadId", "a1"}}
-                    }}}
-                }}
-            };
+                              slimr::Json{{"messages", slimr::Json::array_t{
+                                                           slimr::Json{{"id", "m1"}, {"threadId", "a1"}}}}}}}};
         }
         if (key == "people.people.connections.list") {
             if (params.contains("pageToken") && !params.at("pageToken").get<std::string>().empty()) {
                 return slimr::Json{
                     {"connections", slimr::Json::array_t{
-                        slimr::Json{{"resourceName", "people/c3"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic6 Synthetic8"}}}}},
-                        slimr::Json{{"resourceName", "people/c4"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic2 Synthetic10 Synthetic1"}}}}},
-                        slimr::Json{{"resourceName", "people/c5"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic5 (Example Clinic)"}}}}}
-                    }}
-                };
+                                        slimr::Json{{"resourceName", "people/c3"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic6 Synthetic8"}}}}},
+                                        slimr::Json{{"resourceName", "people/c4"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic2 Synthetic10 Synthetic1"}}}}},
+                                        slimr::Json{{"resourceName", "people/c5"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic5 (Example Clinic)"}}}}}}}};
             }
             return slimr::Json{
                 {"connections", slimr::Json::array_t{
-                    slimr::Json{{"resourceName", "people/c1"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Taylor Example"}}}}},
-                    slimr::Json{{"resourceName", "people/c2"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic4"}}}}}
-                }},
-                {"nextPageToken", "p2"}
-            };
+                                    slimr::Json{{"resourceName", "people/c1"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Taylor Example"}}}}},
+                                    slimr::Json{{"resourceName", "people/c2"}, {"names", slimr::Json::array_t{slimr::Json{{"displayName", "Synthetic4"}}}}}}},
+                {"nextPageToken", "p2"}};
         }
         if (key == "people.contactGroups.list") {
             slimr::Json::array_t grps;
-            for (const auto& g : world.groups) {
+            for (const auto &g : world.groups) {
                 grps.push_back(slimr::Json{{"resourceName", g.resourceName}, {"name", g.name}});
             }
             return slimr::Json{{"contactGroups", grps}};
@@ -557,37 +560,37 @@ public:
                 return slimr::Json{{"files", slimr::Json::array_t{slimr::Json{{"id", folderId}}}}};
             }
             slimr::Json::array_t files;
-            for (const auto& n : world.driveFiles) {
+            for (const auto &n : world.driveFiles) {
                 if (q.find("'" + n + "'") != std::string::npos) {
                     files.push_back(slimr::Json{{"id", n}});
                 }
             }
             return slimr::Json{{"files", files}};
         }
-        if (key == "calendar.calendarList.list") return slimr::Json{{"items", slimr::Json::array_t{}}};
+        if (key == "calendar.calendarList.list")
+            return slimr::Json{{"items", slimr::Json::array_t{}}};
         if (key == "calendar.events.list" || key == "tasks.tasks.list") {
             return slimr::Json{{"pages", slimr::Json::array_t{slimr::Json{{"items", slimr::Json::array_t{}}}}}, {"items", slimr::Json::array_t{}}};
         }
         return slimr::Json{{"id", "created"}};
     }
 
-    slimr::Json driveUpload(const std::string& file, const std::string& name, const std::string& folderPath, const std::string& mimeType) override {
+    slimr::Json driveUpload(const std::string &file, const std::string &name, const std::string &folderPath, const std::string &mimeType) override {
         if (customDriveUpload) {
             return customDriveUpload(file, name, folderPath, mimeType);
         }
         world.uploads.push_back({.name = name, .folder = folderPath});
         return slimr::Json{
             {"id", "d1"},
-            {"webViewLink", "https://drive.google.com/file/d/d1/view"}
-        };
+            {"webViewLink", "https://drive.google.com/file/d/d1/view"}};
     }
 
-    std::string gmailAttachment(const std::string& messageId, const std::string& attachmentId, const std::string&) override {
+    std::string gmailAttachment(const std::string &messageId, const std::string &attachmentId, const std::string &) override {
         world.attachments.push_back(messageId + "/" + attachmentId);
         return "";
     }
 
-    GmailMessage gmailMessage(const std::string& id) override {
+    GmailMessage gmailMessage(const std::string &id) override {
         return GmailMessage{
             .id = id,
             .threadId = "a1",
@@ -600,19 +603,18 @@ public:
                 .filename = "Report.pdf",
                 .mimeType = "application/pdf",
                 .size = 1000,
-                .attachmentId = "att1"
-            }}
-        };
+                .attachmentId = "att1"}}};
     }
 
     std::vector<WhatsAppChat> whatsappChats() override { return {}; }
-    std::vector<WhatsAppMessage> whatsappExport(const std::vector<std::string>&, const std::string&, const std::string&) override { return {}; }
+    std::vector<WhatsAppMessage> whatsappExport(const std::vector<std::string> &, const std::string &, const std::string &) override { return {}; }
 
-    slimr::Json obsidian(const std::string& command, const slimr::Json& input) override {
+    slimr::Json obsidian(const std::string &command, const slimr::Json &input) override {
         if (command == "read") {
             std::string path = input.at("note").get<std::string>();
             auto it = world.notes.find(path);
-            if (it == world.notes.end()) throw std::runtime_error("note not found: " + path);
+            if (it == world.notes.end())
+                throw std::runtime_error("note not found: " + path);
             return slimr::Json{{"path", path}, {"content", it->second}};
         }
         if (command == "write") {
@@ -625,11 +627,11 @@ public:
         return slimr::Json::object_t{};
     }
 
-    std::optional<std::vector<double>> jev(const std::vector<JevQuestion>& qs) override {
+    std::optional<std::vector<double>> jev(const std::vector<JevQuestion> &qs) override {
         return std::vector<double>(qs.size(), 0.9);
     }
 
-    LlmReply llm(const std::string& model, const std::string&, const std::string& system, const std::string&) override {
+    LlmReply llm(const std::string &model, const std::string &, const std::string &system, const std::string &) override {
         LlmUsage usage{.input = 1, .output = 1, .reasoning = 0};
         if (model == modelFor("triage").model) {
             slimr::Json triage = slimr::Json{
@@ -642,17 +644,15 @@ public:
                 {"attachments", slimr::Json::array_t{"Report.pdf"}},
                 {"critical", true},
                 {"expense", slimr::Json{
-                    {"date", "2030.11.05"},
-                    {"who", "Riley"},
-                    {"provider", "Example Clinic (Taylor Example, OT)"},
-                    {"item", "OT review report"},
-                    {"amount", 200.0},
-                    {"currency", "EUR"},
-                    {"qualifies", "ask"}
-                }}
-            };
+                                {"date", "2030.11.05"},
+                                {"who", "Riley"},
+                                {"provider", "Example Clinic (Taylor Example, OT)"},
+                                {"item", "OT review report"},
+                                {"amount", 200.0},
+                                {"currency", "EUR"},
+                                {"qualifies", "ask"}}}};
             if (!triageExtra.is_null() && triageExtra.is_object()) {
-                for (const auto& [k, v] : triageExtra.get<slimr::Json::object_t>()) {
+                for (const auto &[k, v] : triageExtra.get<slimr::Json::object_t>()) {
                     triage[k] = v;
                 }
             }
@@ -661,43 +661,28 @@ public:
         if (system.starts_with("# Meds section")) {
             return LlmReply{
                 .text = "## Meds\n\n### Current\n#### morning\n- Example medicine C\n\n### Prior\n- Example medicine B",
-                .usage = usage
-            };
+                .usage = usage};
         }
         if (system.starts_with("# Contacts")) {
             return LlmReply{
                 .text = R"({"name":"Synthetic7 Synthetic9","create":true,"group":"Example group 6","howWeKnow":"Riley's GP, mobile 087 123 4567, synthetic7@example.com"})",
-                .usage = usage
-            };
+                .usage = usage};
         }
         slimr::Json draft = slimr::Json{
             {"add", slimr::Json::array_t{
-                slimr::Json{
-                    {"date", "2030.11.05"},
-                    {"title", "Riley OT report"},
-                    {"tags", slimr::Json::array_t{"riley", "health/therapy"}},
-                    {"people", slimr::Json::array_t{
-                        slimr::Json{{"name", "Taylor Example"}},
-                        slimr::Json{{"name", "Synthetic7 Synthetic9"}},
-                        slimr::Json{{"name", "Synthetic4"}},
-                        slimr::Json{{"name", "Dr Synthetic6 Synthetic8"}},
-                        slimr::Json{{"name", "Synthetic2 Synthetic10"}},
-                        slimr::Json{{"name", "Synthetic5 Bloggs"}}
-                    }},
-                    {"sources", slimr::Json::array_t{
-                        slimr::Json{{"kind", "gm"}, {"id", "a1"}}
-                    }}
-                },
-                slimr::Json{
-                    {"date", "2030.11.06"},
-                    {"title", "Riley Medikinet up to 30mg"},
-                    {"tags", slimr::Json::array_t{"riley", "health/meds"}},
-                    {"sources", slimr::Json::array_t{
-                        slimr::Json{{"kind", "wa"}, {"id", "w1"}}
-                    }}
-                }
-            }}
-        };
+                        slimr::Json{
+                            {"date", "2030.11.05"},
+                            {"title", "Riley OT report"},
+                            {"tags", slimr::Json::array_t{"riley", "health/therapy"}},
+                            {"people", slimr::Json::array_t{
+                                           slimr::Json{{"name", "Taylor Example"}},
+                                           slimr::Json{{"name", "Synthetic7 Synthetic9"}},
+                                           slimr::Json{{"name", "Synthetic4"}},
+                                           slimr::Json{{"name", "Dr Synthetic6 Synthetic8"}},
+                                           slimr::Json{{"name", "Synthetic2 Synthetic10"}},
+                                           slimr::Json{{"name", "Synthetic5 Bloggs"}}}},
+                            {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "a1"}}}}},
+                        slimr::Json{{"date", "2030.11.06"}, {"title", "Riley Medikinet up to 30mg"}, {"tags", slimr::Json::array_t{"riley", "health/meds"}}, {"sources", slimr::Json::array_t{slimr::Json{{"kind", "wa"}, {"id", "w1"}}}}}}}};
         return LlmReply{.text = slimr::write_json(draft), .usage = usage};
     }
 };
@@ -722,11 +707,12 @@ TEST_SUITE("mine follow-ups") {
 
         auto result = mine(db, MineOptions{.since = "2030-11-04", .until = "2030-11-06"});
         bool hasWarning = false;
-        for (const auto& w : result.warnings) {
-            if (w == "medical expenses: row skipped, Gmail id is not hex") hasWarning = true;
+        for (const auto &w : result.warnings) {
+            if (w == "medical expenses: row skipped, Gmail id is not hex")
+                hasWarning = true;
         }
         CHECK(hasWarning);
-        for (const auto& w : world.writes) {
+        for (const auto &w : world.writes) {
             CHECK(w.find("script") == std::string::npos);
         }
     }
@@ -739,7 +725,7 @@ TEST_SUITE("mine follow-ups") {
         setTools(runner);
 
         auto result = mine(db, MineOptions{.since = "2030-11-04", .until = "2030-11-06"});
-        for (const auto& w : result.warnings) {
+        for (const auto &w : result.warnings) {
             CHECK((w.starts_with("JEV") || w.starts_with("whatsapp")));
         }
 
@@ -761,25 +747,26 @@ TEST_SUITE("mine follow-ups") {
         auto entry = db.getBySource(Source{.kind = "gm", .id = "a1"});
         REQUIRE(entry.has_value());
         bool hasLink = false;
-        for (const auto& l : entry->links) {
-            if (l.kind == "file" && l.url.ends_with("/d1/view")) hasLink = true;
+        for (const auto &l : entry->links) {
+            if (l.kind == "file" && l.url.ends_with("/d1/view"))
+                hasLink = true;
         }
         CHECK(hasLink);
 
         std::map<std::string, std::optional<std::string>> people;
-        for (const auto& p : entry->people) {
+        for (const auto &p : entry->people) {
             people[p.name] = p.contact;
         }
         CHECK(people["Taylor Example"] == "people/c1");
         CHECK(people["Synthetic7 Synthetic9"] == "people/new1");
-        CHECK(people["Synthetic4"] == std::nullopt); // never matched on first name alone
+        CHECK(people["Synthetic4"] == std::nullopt);              // never matched on first name alone
         CHECK(people["Dr Synthetic6 Synthetic8"] == "people/c3"); // title ignored
-        CHECK(people["Synthetic2 Synthetic10"] == std::nullopt); // similar contact
-        CHECK(people["Synthetic5 Bloggs"] == std::nullopt); // first name with only context contact
+        CHECK(people["Synthetic2 Synthetic10"] == std::nullopt);  // similar contact
+        CHECK(people["Synthetic5 Bloggs"] == std::nullopt);       // first name with only context contact
 
         int createContactCalls = 0;
         slimr::Json createdBody;
-        for (const auto& g : world.google) {
+        for (const auto &g : world.google) {
             if (g.contains("method") && g.at("method").get<std::string>() == "createContact") {
                 createContactCalls++;
                 createdBody = g.contains("body") ? g.at("body") : slimr::Json::object_t{};
@@ -790,8 +777,9 @@ TEST_SUITE("mine follow-ups") {
         CHECK(createdBody.at("memberships")[0].at("contactGroupMembership").at("contactGroupResourceName").get<std::string>() == "contactGroups/Example group 6");
 
         bool hasCliniciansGroup = false;
-        for (const auto& grp : world.groups) {
-            if (grp.name == "Example group 6") hasCliniciansGroup = true;
+        for (const auto &grp : world.groups) {
+            if (grp.name == "Example group 6")
+                hasCliniciansGroup = true;
         }
         CHECK(hasCliniciansGroup);
         CHECK(result.stats.contains("usage"));
@@ -818,9 +806,11 @@ TEST_SUITE("mine follow-ups") {
         CHECK(world.uploads.empty());
 
         bool expenseSkip = false, driveSkip = false;
-        for (const auto& f : result.followUps) {
-            if (f.starts_with("expense: skip")) expenseSkip = true;
-            if (f.starts_with("drive: skip")) driveSkip = true;
+        for (const auto &f : result.followUps) {
+            if (f.starts_with("expense: skip"))
+                expenseSkip = true;
+            if (f.starts_with("drive: skip"))
+                driveSkip = true;
         }
         CHECK(expenseSkip);
         CHECK(driveSkip);
@@ -831,9 +821,8 @@ TEST_SUITE("mine follow-ups") {
         auto db = AppDb::open(":memory:");
         auto world = newWorld();
         auto runner = std::make_shared<FollowUpToolsRunner>(world, slimr::Json{
-            {"docFolder", "school"},
-            {"title", "Riley support plan"}
-        });
+                                                                       {"docFolder", "school"},
+                                                                       {"title", "Riley support plan"}});
         setTools(runner);
 
         mine(db, MineOptions{.since = "2030-11-04", .until = "2030-11-06"});
@@ -848,16 +837,18 @@ TEST_SUITE("mine follow-ups") {
         auto world = newWorld();
         world.notes.erase("Records/Example expenses.md");
         auto runner = std::make_shared<FollowUpToolsRunner>(world);
-        runner->customDriveUpload = [](const std::string&, const std::string&, const std::string&, const std::string&) -> slimr::Json {
+        runner->customDriveUpload = [](const std::string &, const std::string &, const std::string &, const std::string &) -> slimr::Json {
             throw std::runtime_error("Drive quota");
         };
         setTools(runner);
 
         auto result = mine(db, MineOptions{.since = "2030-11-04", .until = "2030-11-06"});
         bool medWarning = false, driveWarning = false;
-        for (const auto& w : result.warnings) {
-            if (w.starts_with("medical expenses: note not found")) medWarning = true;
-            if (w.starts_with("kids' documents: ") && w.find("Drive quota") != std::string::npos) driveWarning = true;
+        for (const auto &w : result.warnings) {
+            if (w.starts_with("medical expenses: note not found"))
+                medWarning = true;
+            if (w.starts_with("kids' documents: ") && w.find("Drive quota") != std::string::npos)
+                driveWarning = true;
         }
         CHECK(medWarning);
         CHECK(driveWarning);
@@ -878,14 +869,14 @@ TEST_SUITE("mine follow-ups") {
         auto result = mine(db, MineOptions{.since = "2030-11-04", .until = "2030-11-06", .dryRun = true});
         CHECK(world.writes.empty());
         CHECK(world.uploads.empty());
-        for (const auto& g : world.google) {
+        for (const auto &g : world.google) {
             std::string m = g.contains("method") ? g.at("method").get<std::string>() : "";
             CHECK(m != "createContact");
             CHECK(m != "create");
         }
 
         std::string plan;
-        for (const auto& f : result.followUps) {
+        for (const auto &f : result.followUps) {
             plan += f + "\n";
         }
         CHECK(plan.find("contact: link Taylor Example -> people/c1") != std::string::npos);
@@ -901,23 +892,24 @@ TEST_SUITE("mine follow-ups") {
 // ============================================================================
 
 class FakeToolsRunner : public ToolRunner {
-public:
-    std::vector<slimr::Json>& googleCalls;
+  public:
+    std::vector<slimr::Json> &googleCalls;
     slimr::Json draft;
     std::optional<std::vector<double>> jevScores;
-    std::function<LlmReply(const std::string&, const std::string&, const std::string&, const std::string&)> customLlm;
+    std::function<LlmReply(const std::string &, const std::string &, const std::string &, const std::string &)> customLlm;
 
-    FakeToolsRunner(std::vector<slimr::Json>& calls, slimr::Json d, std::optional<std::vector<double>> js = std::nullopt)
+    FakeToolsRunner(std::vector<slimr::Json> &calls, slimr::Json d, std::optional<std::vector<double>> js = std::nullopt)
         : googleCalls(calls), draft(std::move(d)), jevScores(std::move(js)) {}
 
-    slimr::Json google(const slimr::Json& req) override {
+    slimr::Json google(const slimr::Json &req) override {
         googleCalls.push_back(req);
         std::string service = req.contains("service") ? req.at("service").get<std::string>() : "";
         std::string method = req.contains("method") ? req.at("method").get<std::string>() : "";
         std::string resStr;
         if (req.contains("resource") && req.at("resource").is_array()) {
             for (size_t i = 0; i < req.at("resource").get<slimr::Json::array_t>().size(); ++i) {
-                if (i > 0) resStr += ".";
+                if (i > 0)
+                    resStr += ".";
                 resStr += req.at("resource").get<slimr::Json::array_t>()[i].get<std::string>();
             }
         }
@@ -926,12 +918,9 @@ public:
         if (key == "gmail.users.messages.list") {
             return slimr::Json{
                 {"pages", slimr::Json::array_t{
-                    slimr::Json{{"messages", slimr::Json::array_t{
-                        slimr::Json{{"id", "m1"}, {"threadId", "t1"}},
-                        slimr::Json{{"id", "m2"}, {"threadId", "t2"}}
-                    }}}
-                }}
-            };
+                              slimr::Json{{"messages", slimr::Json::array_t{
+                                                           slimr::Json{{"id", "m1"}, {"threadId", "t1"}},
+                                                           slimr::Json{{"id", "m2"}, {"threadId", "t2"}}}}}}}};
         }
         if (key == "people.people.connections.list") {
             return slimr::Json{{"pages", slimr::Json::array_t{slimr::Json{{"connections", slimr::Json::array_t{}}}}}};
@@ -941,25 +930,19 @@ public:
                 req.at("params").at("calendarId").get<std::string>() == "source1@example.com") {
                 return slimr::Json{
                     {"pages", slimr::Json::array_t{
-                        slimr::Json{{"items", slimr::Json::array_t{
-                            slimr::Json{
-                                {"id", "ev1"},
-                                {"summary", "Dentist Riley"},
-                                {"start", slimr::Json{{"dateTime", "2030-11-05T10:00:00Z"}}},
-                                {"end", slimr::Json{{"dateTime", "2030-11-05T11:00:00Z"}}}
-                            }
-                        }}}
-                    }}
-                };
+                                  slimr::Json{{"items", slimr::Json::array_t{
+                                                            slimr::Json{
+                                                                {"id", "ev1"},
+                                                                {"summary", "Dentist Riley"},
+                                                                {"start", slimr::Json{{"dateTime", "2030-11-05T10:00:00Z"}}},
+                                                                {"end", slimr::Json{{"dateTime", "2030-11-05T11:00:00Z"}}}}}}}}}};
             }
             return slimr::Json{{"pages", slimr::Json::array_t{slimr::Json{{"items", slimr::Json::array_t{}}}}}};
         }
         if (key == "tasks.tasks.list") {
             return slimr::Json{
                 {"items", slimr::Json::array_t{
-                    slimr::Json{{"title", "Pay school fee"}, {"due", "2030-11-20T00:00:00.000Z"}}
-                }}
-            };
+                              slimr::Json{{"title", "Pay school fee"}, {"due", "2030-11-20T00:00:00.000Z"}}}}};
         }
         if (key == "calendar.calendarList.list") {
             return slimr::Json{{"items", slimr::Json::array_t{slimr::Json{{"id", "sugg"}, {"summary", "AI-Suggests"}}}}};
@@ -967,15 +950,15 @@ public:
         return slimr::Json{{"id", "created"}};
     }
 
-    slimr::Json driveUpload(const std::string&, const std::string&, const std::string&, const std::string&) override {
+    slimr::Json driveUpload(const std::string &, const std::string &, const std::string &, const std::string &) override {
         return slimr::Json::object_t{};
     }
 
-    std::string gmailAttachment(const std::string&, const std::string&, const std::string&) override {
+    std::string gmailAttachment(const std::string &, const std::string &, const std::string &) override {
         return "";
     }
 
-    GmailMessage gmailMessage(const std::string& id) override {
+    GmailMessage gmailMessage(const std::string &id) override {
         if (id == "m1") {
             return GmailMessage{
                 .id = "m1",
@@ -1004,7 +987,7 @@ public:
         return {WhatsAppChat{.jid = "e@lid", .name = "Jamie", .is_group = false, .message_count = 10}};
     }
 
-    std::vector<WhatsAppMessage> whatsappExport(const std::vector<std::string>&, const std::string&, const std::string&) override {
+    std::vector<WhatsAppMessage> whatsappExport(const std::vector<std::string> &, const std::string &, const std::string &) override {
         return {WhatsAppMessage{
             .id = "w1",
             .chat_jid = "e@lid",
@@ -1016,16 +999,17 @@ public:
         }};
     }
 
-    slimr::Json obsidian(const std::string&, const slimr::Json&) override {
+    slimr::Json obsidian(const std::string &, const slimr::Json &) override {
         return slimr::Json::object_t{};
     }
 
-    std::optional<std::vector<double>> jev(const std::vector<JevQuestion>& qs) override {
-        if (jevScores) return *jevScores;
+    std::optional<std::vector<double>> jev(const std::vector<JevQuestion> &qs) override {
+        if (jevScores)
+            return *jevScores;
         return std::vector<double>(qs.size(), 0.02);
     }
 
-    LlmReply llm(const std::string& model, const std::string& effort, const std::string& system, const std::string& user) override {
+    LlmReply llm(const std::string &model, const std::string &effort, const std::string &system, const std::string &user) override {
         if (customLlm) {
             return customLlm(model, effort, system, user);
         }
@@ -1033,13 +1017,11 @@ public:
         if (model == triageChoice.model || (triageChoice.fallback && model == *triageChoice.fallback)) {
             return LlmReply{
                 .text = R"({"date":"2030.11.12","title":"School closed for strike","tags":["casey","riley","school"],"details":[],"ids":{"gm":"t1"},"subject":"School closed 12th"})",
-                .usage = {.input = 10, .output = 5, .reasoning = 0}
-            };
+                .usage = {.input = 10, .output = 5, .reasoning = 0}};
         }
         return LlmReply{
             .text = slimr::write_json(draft),
-            .usage = {.input = 20, .output = 10, .reasoning = 0}
-        };
+            .usage = {.input = 20, .output = 10, .reasoning = 0}};
     }
 };
 
@@ -1078,7 +1060,7 @@ TEST_SUITE("mine pipeline") {
 
         mine(db, MineOptions{.since = "2030-11-04", .until = "2030-11-06", .dryRun = true});
         bool hasCalendarList = false;
-        for (const auto& c : calls) {
+        for (const auto &c : calls) {
             if (c.contains("resource") && c.at("resource").is_array() &&
                 !c.at("resource").get<slimr::Json::array_t>().empty() &&
                 c.at("resource").get<slimr::Json::array_t>()[0].get<std::string>() == "calendarList") {
@@ -1094,24 +1076,13 @@ TEST_SUITE("mine pipeline") {
         std::vector<slimr::Json> calls;
         slimr::Json draft = slimr::Json{
             {"add", slimr::Json::array_t{
-                slimr::Json{
-                    {"date", "2030.11.12"},
-                    {"title", "School closed for strike"},
-                    {"sources", slimr::Json::array_t{
-                        slimr::Json{{"kind", "gm"}, {"id", "t1"}}
-                    }},
-                    {"people", slimr::Json::array_t{
-                        slimr::Json{{"name", "Taylor Example"}, {"contact", "people/c123"}},
-                        slimr::Json{{"name", "Evil"}, {"contact", "https://evil.example/x"}}
-                    }},
-                    {"links", slimr::Json::array_t{
-                        slimr::Json{{"kind", "link"}, {"label", "ok"}, {"url", "https://example.com/a"}},
-                        slimr::Json{{"kind", "link"}, {"label", "http"}, {"url", "http://example.com/a"}},
-                        slimr::Json{{"kind", "link"}, {"label", "js"}, {"url", "javascript:alert(1)"}}
-                    }}
-                }
-            }}
-        };
+                        slimr::Json{
+                            {"date", "2030.11.12"},
+                            {"title", "School closed for strike"},
+                            {"sources", slimr::Json::array_t{
+                                            slimr::Json{{"kind", "gm"}, {"id", "t1"}}}},
+                            {"people", slimr::Json::array_t{slimr::Json{{"name", "Taylor Example"}, {"contact", "people/c123"}}, slimr::Json{{"name", "Evil"}, {"contact", "https://evil.example/x"}}}},
+                            {"links", slimr::Json::array_t{slimr::Json{{"kind", "link"}, {"label", "ok"}, {"url", "https://example.com/a"}}, slimr::Json{{"kind", "link"}, {"label", "http"}, {"url", "http://example.com/a"}}, slimr::Json{{"kind", "link"}, {"label", "js"}, {"url", "javascript:alert(1)"}}}}}}}};
         auto runner = std::make_shared<FakeToolsRunner>(calls, draft);
         setTools(runner);
 
@@ -1120,20 +1091,24 @@ TEST_SUITE("mine pipeline") {
         REQUIRE(entry.has_value());
 
         std::vector<std::string> linkLabels;
-        for (const auto& l : entry->links) linkLabels.push_back(l.label);
+        for (const auto &l : entry->links)
+            linkLabels.push_back(l.label);
         CHECK(linkLabels.size() == 2);
         CHECK(linkLabels[0] == "ok");
         CHECK(linkLabels[1] == "School closed 12th");
 
         std::map<std::string, std::optional<std::string>> people;
-        for (const auto& p : entry->people) people[p.name] = p.contact;
+        for (const auto &p : entry->people)
+            people[p.name] = p.contact;
         CHECK(people["Taylor Example"] == "people/c123");
         CHECK(people["Evil"] == std::nullopt);
 
         int linkDropped = 0, contactDropped = 0;
-        for (const auto& w : result.warnings) {
-            if (w.starts_with("link dropped")) linkDropped++;
-            if (w.starts_with("contact dropped")) contactDropped++;
+        for (const auto &w : result.warnings) {
+            if (w.starts_with("link dropped"))
+                linkDropped++;
+            if (w.starts_with("contact dropped"))
+                contactDropped++;
         }
         CHECK(linkDropped == 2);
         CHECK(contactDropped == 1);
@@ -1147,41 +1122,27 @@ TEST_SUITE("mine pipeline") {
         EnvGuard guard;
         auto db = AppDb::open(":memory:");
         auto existing = db.add({NewEntry{
-            .date = "2030.11.04",
-            .title = "Riley OT school observation",
-            .tags = {"riley"}
-        }}).added[0];
+                                   .date = "2030.11.04",
+                                   .title = "Riley OT school observation",
+                                   .tags = {"riley"}}})
+                            .added[0];
 
         std::vector<slimr::Json> calls;
         slimr::Json draft = slimr::Json{
             {"add", slimr::Json::array_t{
-                slimr::Json{
-                    {"date", "2030.11.12"},
-                    {"title", "School closed for strike"},
-                    {"tags", slimr::Json::array_t{"casey", "riley", "school"}},
-                    {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "t1"}}}}
-                },
-                slimr::Json{
-                    {"date", "2030.11.05"},
-                    {"title", "Riley dentist"},
-                    {"tags", slimr::Json::array_t{"riley", "health/dental"}},
-                    {"sources", slimr::Json::array_t{slimr::Json{{"kind", "cal"}, {"id", "ev1"}}}}
-                }
-            }},
-            {"update", slimr::Json::array_t{
-                slimr::Json{
-                    {"id", existing},
-                    {"addDetails", slimr::Json::array_t{"Report to follow"}}
-                }
-            }},
-            {"suggestEvents", slimr::Json::array_t{
-                slimr::Json{{"title", "Riley swim party"}, {"start", "2099-11-14T14:00"}}
-            }},
-            {"deadlines", slimr::Json::array_t{
-                slimr::Json{{"title", "Pay school fee"}, {"due", "2030-11-20"}},
-                slimr::Json{{"title", "Return swim form"}, {"due", "2099-11-13"}}
-            }}
-        };
+                        slimr::Json{
+                            {"date", "2030.11.12"},
+                            {"title", "School closed for strike"},
+                            {"tags", slimr::Json::array_t{"casey", "riley", "school"}},
+                            {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "t1"}}}}},
+                        slimr::Json{
+                            {"date", "2030.11.05"},
+                            {"title", "Riley dentist"},
+                            {"tags", slimr::Json::array_t{"riley", "health/dental"}},
+                            {"sources", slimr::Json::array_t{slimr::Json{{"kind", "cal"}, {"id", "ev1"}}}}}}},
+            {"update", slimr::Json::array_t{slimr::Json{{"id", existing}, {"addDetails", slimr::Json::array_t{"Report to follow"}}}}},
+            {"suggestEvents", slimr::Json::array_t{slimr::Json{{"title", "Riley swim party"}, {"start", "2099-11-14T14:00"}}}},
+            {"deadlines", slimr::Json::array_t{slimr::Json{{"title", "Pay school fee"}, {"due", "2030-11-20"}}, slimr::Json{{"title", "Return swim form"}, {"due", "2099-11-13"}}}}};
         auto runner = std::make_shared<FakeToolsRunner>(calls, draft);
         setTools(runner);
 
@@ -1206,7 +1167,7 @@ TEST_SUITE("mine pipeline") {
         CHECK(result.eventsSuggested[0] == "2099-11-14T14:00 Riley swim party");
 
         std::string insertCalId;
-        for (const auto& c : calls) {
+        for (const auto &c : calls) {
             std::string m = c.contains("method") ? c.at("method").get<std::string>() : "";
             std::string r0;
             if (c.contains("resource") && c.at("resource").is_array() && !c.at("resource").get<slimr::Json::array_t>().empty()) {
@@ -1235,13 +1196,10 @@ TEST_SUITE("mine pipeline") {
         std::vector<slimr::Json> calls;
         slimr::Json draft = slimr::Json{
             {"add", slimr::Json::array_t{
-                slimr::Json{
-                    {"date", "2030.11.12"},
-                    {"title", "x"},
-                    {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "t1"}}}}
-                }
-            }}
-        };
+                        slimr::Json{
+                            {"date", "2030.11.12"},
+                            {"title", "x"},
+                            {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "t1"}}}}}}}};
         auto runner = std::make_shared<FakeToolsRunner>(calls, draft);
         setTools(runner);
 
@@ -1257,7 +1215,7 @@ TEST_SUITE("mine pipeline") {
         auto db = AppDb::open(":memory:");
         std::vector<slimr::Json> calls;
         auto runner = std::make_shared<FakeToolsRunner>(calls, slimr::Json::object_t{});
-        runner->customLlm = [](const std::string&, const std::string&, const std::string&, const std::string&) -> LlmReply {
+        runner->customLlm = [](const std::string &, const std::string &, const std::string &, const std::string &) -> LlmReply {
             throw std::runtime_error("DeepSeek down");
         };
         setTools(runner);
@@ -1272,7 +1230,7 @@ TEST_SUITE("mine pipeline") {
 
     TEST_CASE("a failing model falls back to the step's fallback model, with one warning per step") {
         EnvGuard guard;
-        const std::vector<const char*> envNames = {
+        const std::vector<const char *> envNames = {
             "ASSISTANT_LLM_DEFAULT",
             "ASSISTANT_LLM_FAST",
             "ASSISTANT_LLM_DEFAULT_FALLBACK",
@@ -1280,16 +1238,18 @@ TEST_SUITE("mine pipeline") {
         };
         std::map<std::string, std::optional<std::string>> saved;
         for (auto n : envNames) {
-            const char* v = std::getenv(n);
+            const char *v = std::getenv(n);
             saved[n] = v ? std::optional<std::string>(v) : std::nullopt;
         }
 
         struct RestoreLocalEnv {
-            std::map<std::string, std::optional<std::string>>& s;
+            std::map<std::string, std::optional<std::string>> &s;
             ~RestoreLocalEnv() {
-                for (const auto& [k, v] : s) {
-                    if (v) setenv(k.c_str(), v->c_str(), 1);
-                    else unsetenv(k.c_str());
+                for (const auto &[k, v] : s) {
+                    if (v)
+                        setenv(k.c_str(), v->c_str(), 1);
+                    else
+                        unsetenv(k.c_str());
                 }
             }
         } restore{saved};
@@ -1303,16 +1263,13 @@ TEST_SUITE("mine pipeline") {
         std::vector<slimr::Json> calls;
         slimr::Json draft = slimr::Json{
             {"add", slimr::Json::array_t{
-                slimr::Json{
-                    {"date", "2030.11.12"},
-                    {"title", "x"},
-                    {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "t1"}}}}
-                }
-            }}
-        };
+                        slimr::Json{
+                            {"date", "2030.11.12"},
+                            {"title", "x"},
+                            {"sources", slimr::Json::array_t{slimr::Json{{"kind", "gm"}, {"id", "t1"}}}}}}}};
         auto runner = std::make_shared<FakeToolsRunner>(calls, draft);
         std::vector<std::string> asked;
-        runner->customLlm = [&](const std::string& model, const std::string&, const std::string&, const std::string&) -> LlmReply {
+        runner->customLlm = [&](const std::string &model, const std::string &, const std::string &, const std::string &) -> LlmReply {
             asked.push_back(model);
             if (model.starts_with("gemini-")) {
                 throw std::runtime_error("Gemini error: 402 credits depleted");
@@ -1320,13 +1277,11 @@ TEST_SUITE("mine pipeline") {
             if (model == "deepseek-flash") {
                 return LlmReply{
                     .text = R"({"date":"2030.11.12","title":"School closed for strike","tags":["casey","riley","school"],"details":[],"ids":{"gm":"t1"},"subject":"School closed 12th"})",
-                    .usage = {.input = 10, .output = 5, .reasoning = 0}
-                };
+                    .usage = {.input = 10, .output = 5, .reasoning = 0}};
             }
             return LlmReply{
                 .text = slimr::write_json(draft),
-                .usage = {.input = 20, .output = 10, .reasoning = 0}
-            };
+                .usage = {.input = 20, .output = 10, .reasoning = 0}};
         };
         setTools(runner);
 
@@ -1338,10 +1293,11 @@ TEST_SUITE("mine pipeline") {
         CHECK(std::find(asked.begin(), asked.end(), "deepseek-v4-pro") != asked.end());
 
         std::vector<std::string> fallbackSteps;
-        for (const auto& w : result.warnings) {
+        for (const auto &w : result.warnings) {
             if (w.find("failed, used") != std::string::npos) {
                 size_t cpos = w.find(':');
-                if (cpos != std::string::npos) fallbackSteps.push_back(w.substr(0, cpos));
+                if (cpos != std::string::npos)
+                    fallbackSteps.push_back(w.substr(0, cpos));
             }
         }
         CHECK(fallbackSteps.size() == 2);

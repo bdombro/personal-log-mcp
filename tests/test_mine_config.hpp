@@ -10,20 +10,25 @@ struct ScopedMineEnv {
     std::string name;
     std::optional<std::string> previous;
 
-    ScopedMineEnv(std::string key, const std::optional<std::string>& value)
+    ScopedMineEnv(std::string key, const std::optional<std::string> &value)
         : name(std::move(key)) {
-        if (const char* old = std::getenv(name.c_str())) previous = old;
-        if (value) setenv(name.c_str(), value->c_str(), 1);
-        else unsetenv(name.c_str());
+        if (const char *old = std::getenv(name.c_str()))
+            previous = old;
+        if (value)
+            setenv(name.c_str(), value->c_str(), 1);
+        else
+            unsetenv(name.c_str());
     }
 
     ~ScopedMineEnv() {
-        if (previous) setenv(name.c_str(), previous->c_str(), 1);
-        else unsetenv(name.c_str());
+        if (previous)
+            setenv(name.c_str(), previous->c_str(), 1);
+        else
+            unsetenv(name.c_str());
     }
 };
 
-inline void writeMineFixture(const std::filesystem::path& path, const std::string& content) {
+inline void writeMineFixture(const std::filesystem::path &path, const std::string &content) {
     std::ofstream file(path);
     file << content;
     file.close();
@@ -64,12 +69,12 @@ TEST_SUITE("mining configuration") {
         const auto path = temp.path / "mine.json";
         const auto config = loadMineConfig();
         CHECK_THROWS(loadMineConfig(path));
-        for (const auto& text : {"{private-marker", "{}", R"({"calendars":false})"}) {
+        for (const auto &text : {"{private-marker", "{}", R"({"calendars":false})"}) {
             writeMineFixture(path, text);
             try {
                 (void)loadMineConfig(path);
                 FAIL("Invalid configuration accepted");
-            } catch (const std::runtime_error& error) {
+            } catch (const std::runtime_error &error) {
                 CHECK(std::string(error.what()).find("private-marker") == std::string::npos);
             }
         }
@@ -100,20 +105,23 @@ TEST_SUITE("mining configuration") {
         auto app = make_personal_log_app();
         CHECK(app.tools().contains("mine"));
         slimr::Json request = slimr::Json::object_t{
-            {"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/call"},
+            {"jsonrpc", "2.0"},
+            {"id", 1},
+            {"method", "tools/call"},
             {"params", slimr::Json::object_t{
-                {"name", "status"},
-                {"arguments", slimr::Json::object_t{}},
-                {"_meta", slimr::Json::object_t{
-                    {"io.modelcontextprotocol/protocolVersion", std::string(slimr::kMcpProtocolVersion)},
-                    {"io.modelcontextprotocol/clientCapabilities", slimr::json_obj()},
-                }},
-            }},
+                           {"name", "status"},
+                           {"arguments", slimr::Json::object_t{}},
+                           {"_meta", slimr::Json::object_t{
+                                         {"io.modelcontextprotocol/protocolVersion", std::string(slimr::kMcpProtocolVersion)},
+                                         {"io.modelcontextprotocol/clientCapabilities", slimr::json_obj()},
+                                     }},
+                       }},
         };
         CHECK(!app.dispatchMcpJson(request).contains("error"));
         request["params"]["name"] = "mine";
         for (bool createInvalid : {false, true}) {
-            if (createInvalid) writeMineFixture(configPath, "{}");
+            if (createInvalid)
+                writeMineFixture(configPath, "{}");
             const auto response = app.dispatchMcpJson(request);
             const auto result = slimr::write_json(response);
             CHECK(result.find("configuration") != std::string::npos);

@@ -29,7 +29,7 @@ struct Person {
     std::string name;
     std::optional<std::string> contact = std::nullopt;
 
-    bool operator==(const Person&) const = default;
+    bool operator==(const Person &) const = default;
 };
 
 /// Where an entry came from; (kind, id) is unique across the log.
@@ -37,7 +37,7 @@ struct Source {
     std::string kind; // "cal", "gm", "wa"
     std::string id;
 
-    bool operator==(const Source&) const = default;
+    bool operator==(const Source &) const = default;
 };
 
 /// A link attached to an entry.
@@ -46,7 +46,7 @@ struct Link {
     std::string label;
     std::string url;
 
-    bool operator==(const Link&) const = default;
+    bool operator==(const Link &) const = default;
 };
 
 /// Fields for a new entry.
@@ -59,7 +59,7 @@ struct NewEntry {
     std::vector<Source> sources;
     std::vector<Link> links;
 
-    bool operator==(const NewEntry&) const = default;
+    bool operator==(const NewEntry &) const = default;
 };
 
 /// A stored entry.
@@ -73,7 +73,7 @@ struct Entry {
     std::vector<Source> sources;
     std::vector<Link> links;
 
-    bool operator==(const Entry&) const = default;
+    bool operator==(const Entry &) const = default;
 };
 
 /// An entry skipped during add because one of its sources is already logged.
@@ -83,7 +83,7 @@ struct SkippedEntry {
     int64_t existingId = 0;
     std::string source;
 
-    bool operator==(const SkippedEntry&) const = default;
+    bool operator==(const SkippedEntry &) const = default;
 };
 
 /// Result of adding a batch of entries.
@@ -91,7 +91,7 @@ struct AddResult {
     std::vector<int64_t> added;
     std::vector<SkippedEntry> skipped;
 
-    bool operator==(const AddResult&) const = default;
+    bool operator==(const AddResult &) const = default;
 };
 
 /// Result of addKeepingEntry.
@@ -99,7 +99,7 @@ struct AddKeepingResult {
     int64_t id = 0;
     std::vector<std::string> droppedSources;
 
-    bool operator==(const AddKeepingResult&) const = default;
+    bool operator==(const AddKeepingResult &) const = default;
 };
 
 /// Filters for search.
@@ -111,7 +111,7 @@ struct SearchFilters {
     std::optional<std::string> person = std::nullopt;
     std::optional<int64_t> limit = std::nullopt;
 
-    bool operator==(const SearchFilters&) const = default;
+    bool operator==(const SearchFilters &) const = default;
 };
 
 /// Changes for update.
@@ -128,7 +128,7 @@ struct EntryPatch {
     std::vector<Link> addLinks;
     std::vector<std::string> removeLinks;
 
-    bool operator==(const EntryPatch&) const = default;
+    bool operator==(const EntryPatch &) const = default;
 };
 
 /// One mining run.
@@ -142,7 +142,7 @@ struct Run {
     slimr::Json stats = slimr::Json::object_t{};
     std::optional<std::string> error = std::nullopt;
 
-    bool operator==(const Run& o) const {
+    bool operator==(const Run &o) const {
         return id == o.id && startedAt == o.startedAt && finishedAt == o.finishedAt &&
                since == o.since && until == o.until && status == o.status &&
                error == o.error && slimr::write_json(stats) == slimr::write_json(o.stats);
@@ -154,7 +154,7 @@ struct SqlResult {
     std::vector<slimr::Json> rows;
     bool truncated = false;
 
-    bool operator==(const SqlResult&) const = default;
+    bool operator==(const SqlResult &) const = default;
 };
 
 // ============================================================================
@@ -164,8 +164,9 @@ struct SqlResult {
 /// Normalizes dates: converts ISO dashes to dots (e.g. 2026-11-04 -> 2026.11.04).
 inline std::string normalizeDate(std::string_view date) {
     std::string s(date);
-    for (char& c : s) {
-        if (c == '-') c = '.';
+    for (char &c : s) {
+        if (c == '-')
+            c = '.';
     }
     return s;
 }
@@ -176,7 +177,7 @@ inline std::string normalizeTag(std::string_view tag) {
         tag.remove_prefix(1);
     }
     std::string s(tag);
-    for (char& c : s) {
+    for (char &c : s) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     return s;
@@ -195,10 +196,12 @@ inline std::string format_iso_now() {
 
 /// Default database path: $PERSONAL_LOG_DB or ~/.local/share/personal-log/log.db.
 inline std::string defaultDbPath() {
-    const char* env = std::getenv("PERSONAL_LOG_DB");
-    if (env && *env) return std::string(env);
-    const char* home = std::getenv("HOME");
-    if (!home || !*home) return "log.db";
+    const char *env = std::getenv("PERSONAL_LOG_DB");
+    if (env && *env)
+        return std::string(env);
+    const char *home = std::getenv("HOME");
+    if (!home || !*home)
+        return "log.db";
     return std::string(home) + "/.local/share/personal-log/log.db";
 }
 
@@ -210,7 +213,8 @@ inline std::string ftsQuery(std::string_view text) {
         while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
             ++i;
         }
-        if (i >= text.size()) break;
+        if (i >= text.size())
+            break;
 
         if (text[i] == '"') {
             size_t j = text.find('"', i + 1);
@@ -230,7 +234,7 @@ inline std::string ftsQuery(std::string_view text) {
     }
 
     std::vector<std::string> parts;
-    for (const auto& token : tokens) {
+    for (const auto &token : tokens) {
         if (token == "OR") {
             parts.push_back("OR");
             continue;
@@ -243,9 +247,11 @@ inline std::string ftsQuery(std::string_view text) {
                 }
             }
             size_t start = 0;
-            while (start < phrase.size() && std::isspace(static_cast<unsigned char>(phrase[start]))) ++start;
+            while (start < phrase.size() && std::isspace(static_cast<unsigned char>(phrase[start])))
+                ++start;
             size_t end = phrase.size();
-            while (end > start && std::isspace(static_cast<unsigned char>(phrase[end - 1]))) --end;
+            while (end > start && std::isspace(static_cast<unsigned char>(phrase[end - 1])))
+                --end;
             std::string trimmed = phrase.substr(start, end - start);
             if (!trimmed.empty()) {
                 parts.push_back("\"" + trimmed + "\"");
@@ -256,7 +262,8 @@ inline std::string ftsQuery(std::string_view text) {
         bool prefix = token.ends_with('*');
         std::string word;
         for (char c : token) {
-            if (c != '"') word += c;
+            if (c != '"')
+                word += c;
         }
         while (!word.empty() && word.back() == '*') {
             word.pop_back();
@@ -275,7 +282,8 @@ inline std::string ftsQuery(std::string_view text) {
 
     std::string out;
     for (size_t k = 0; k < parts.size(); ++k) {
-        if (k > 0) out += " ";
+        if (k > 0)
+            out += " ";
         out += parts[k];
     }
     return out;
@@ -289,7 +297,8 @@ inline bool is_select_or_with(std::string_view query) {
     }
     std::string_view remaining = query.substr(i);
     auto starts_with_ci_word = [](std::string_view s, std::string_view prefix) {
-        if (s.size() < prefix.size()) return false;
+        if (s.size() < prefix.size())
+            return false;
         for (size_t k = 0; k < prefix.size(); ++k) {
             if (std::tolower(static_cast<unsigned char>(s[k])) != std::tolower(static_cast<unsigned char>(prefix[k]))) {
                 return false;
@@ -369,15 +378,14 @@ inline const std::vector<std::string> LOG_MIGRATIONS = {
         (SELECT group_concat(name, '; ') FROM entry_people p WHERE p.entry_id = e.id) AS people,
         (SELECT group_concat(kind || ':' || source_id, ' ') FROM entry_sources s WHERE s.entry_id = e.id) AS sources
       FROM entries e;
-    )sql"
-};
+    )sql"};
 
 // ============================================================================
 // Schema Notes for `schema` command
 // ============================================================================
 
 inline constexpr std::string_view SCHEMA_NOTES =
-R"(Read-only SQL (SQLite). Prefer the view v_entries.
+    R"(Read-only SQL (SQLite). Prefer the view v_entries.
 v_entries(id, date, title, details, tags, people, sources)
   date: 'YYYY.MM.DD' or 'YYYY.MM' (sorts as text); details: JSON array of lines (use json_each);
   tags: space-separated, no '#'; people: '; '-separated; sources: 'kind:id' space-separated.
@@ -397,7 +405,7 @@ Examples:
 // ============================================================================
 
 class AppDb {
-public:
+  public:
     explicit AppDb(std::string path = defaultDbPath())
         : path_(std::move(path)) {
         slimr::SqliteOptions opts;
@@ -405,10 +413,10 @@ public:
         db_ = std::make_unique<slimr::SqliteDb>(path_, std::move(opts));
     }
 
-    AppDb(const AppDb&) = delete;
-    AppDb& operator=(const AppDb&) = delete;
-    AppDb(AppDb&&) = delete;
-    AppDb& operator=(AppDb&&) = delete;
+    AppDb(const AppDb &) = delete;
+    AppDb &operator=(const AppDb &) = delete;
+    AppDb(AppDb &&) = delete;
+    AppDb &operator=(AppDb &&) = delete;
 
     static AppDb open(std::string path = defaultDbPath()) {
         return AppDb(std::move(path));
@@ -421,11 +429,11 @@ public:
         }
     }
 
-    slimr::SqliteDb& sqlite() { return *db_; }
-    const std::string& path() const noexcept { return path_; }
+    slimr::SqliteDb &sqlite() { return *db_; }
+    const std::string &path() const noexcept { return path_; }
 
     template <typename Fn>
-    decltype(auto) withLock(Fn&& fn) {
+    decltype(auto) withLock(Fn &&fn) {
         std::lock_guard<std::mutex> lock(mu_);
         return fn(*db_);
     }
@@ -438,14 +446,14 @@ public:
     // --- Core Operations ---
 
     /// Add entries in one transaction; entries with an already-logged source are skipped.
-    AddResult add(const std::vector<NewEntry>& entries) {
+    AddResult add(const std::vector<NewEntry> &entries) {
         std::lock_guard<std::mutex> lock(mu_);
         AddResult result;
-        db_->transaction([&](slimr::Tx&) {
+        db_->transaction([&](slimr::Tx &) {
             for (size_t index = 0; index < entries.size(); ++index) {
-                const auto& entry = entries[index];
+                const auto &entry = entries[index];
                 std::optional<std::pair<Source, int64_t>> clash = std::nullopt;
-                for (const auto& s : entry.sources) {
+                for (const auto &s : entry.sources) {
                     auto owner = sourceOwnerLocked(s);
                     if (owner) {
                         clash = std::make_pair(s, *owner);
@@ -478,13 +486,13 @@ public:
     }
 
     /// Add one entry, dropping (and returning) any source already owned by another entry; used by import.
-    AddKeepingResult addKeepingEntry(const NewEntry& entry) {
+    AddKeepingResult addKeepingEntry(const NewEntry &entry) {
         std::lock_guard<std::mutex> lock(mu_);
         AddKeepingResult res;
         int64_t id = 0;
-        db_->transaction([&](slimr::Tx&) {
+        db_->transaction([&](slimr::Tx &) {
             std::vector<Source> keptSources;
-            for (const auto& s : entry.sources) {
+            for (const auto &s : entry.sources) {
                 auto owner = sourceOwnerLocked(s);
                 if (!owner) {
                     keptSources.push_back(s);
@@ -495,7 +503,7 @@ public:
 
             std::vector<Source> uniqueSources;
             std::set<std::string> seen;
-            for (const auto& s : keptSources) {
+            for (const auto &s : keptSources) {
                 std::string key = s.kind + ":" + s.id;
                 if (seen.insert(key).second) {
                     uniqueSources.push_back(s);
@@ -521,15 +529,16 @@ public:
     }
 
     /// The entry owning a source, or std::nullopt.
-    std::optional<Entry> getBySource(const Source& source) {
+    std::optional<Entry> getBySource(const Source &source) {
         std::lock_guard<std::mutex> lock(mu_);
         auto owner = sourceOwnerLocked(source);
-        if (!owner) return std::nullopt;
+        if (!owner)
+            return std::nullopt;
         return getLocked(*owner);
     }
 
     /// Search entries: FTS keywords (relevance, then newest) or filters only (newest first).
-    std::vector<Entry> search(const SearchFilters& filters) {
+    std::vector<Entry> search(const SearchFilters &filters) {
         std::lock_guard<std::mutex> lock(mu_);
         std::vector<std::string> where;
         std::vector<slimr::SqlValue> params;
@@ -555,7 +564,7 @@ public:
             where.push_back("e.date <= ?");
             params.push_back(normalizeDate(*filters.to) + "~");
         }
-        for (const auto& raw_tag : filters.tags) {
+        for (const auto &raw_tag : filters.tags) {
             std::string tag = normalizeTag(raw_tag);
             where.push_back("EXISTS (SELECT 1 FROM entry_tags t WHERE t.entry_id = e.id AND (t.tag = ? OR t.tag LIKE ?))");
             params.push_back(tag);
@@ -567,14 +576,17 @@ public:
         }
 
         int64_t limit = filters.limit.value_or(50);
-        if (limit < 1) limit = 1;
-        if (limit > 500) limit = 500;
+        if (limit < 1)
+            limit = 1;
+        if (limit > 500)
+            limit = 500;
 
         std::string sql = "SELECT e.id, e.date, e.title, e.details FROM " + from;
         if (!where.empty()) {
             sql += " WHERE ";
             for (size_t i = 0; i < where.size(); ++i) {
-                if (i > 0) sql += " AND ";
+                if (i > 0)
+                    sql += " AND ";
                 sql += where[i];
             }
         }
@@ -583,7 +595,7 @@ public:
         auto rows = db_->all(sql, params);
         std::vector<Entry> entries;
         entries.reserve(rows.size());
-        for (const auto& r : rows) {
+        for (const auto &r : rows) {
             int64_t id = r.at("id").get<int64_t>();
             std::string date = r.at("date").get<std::string>();
             std::string title = r.at("title").get<std::string>();
@@ -594,12 +606,13 @@ public:
     }
 
     /// Apply a patch to one entry; std::nullopt when it doesn't exist.
-    std::optional<Entry> update(int64_t id, const EntryPatch& patch) {
+    std::optional<Entry> update(int64_t id, const EntryPatch &patch) {
         std::lock_guard<std::mutex> lock(mu_);
         auto existing = getLocked(id);
-        if (!existing) return std::nullopt;
+        if (!existing)
+            return std::nullopt;
 
-        db_->transaction([&](slimr::Tx&) {
+        db_->transaction([&](slimr::Tx &) {
             applyPatchLocked(id, patch);
         });
 
@@ -611,11 +624,12 @@ public:
         std::lock_guard<std::mutex> lock(mu_);
         auto keep = getLocked(keepId);
         auto gone = getLocked(mergeId);
-        if (!keep || !gone || keepId == mergeId) return std::nullopt;
+        if (!keep || !gone || keepId == mergeId)
+            return std::nullopt;
 
-        db_->transaction([&](slimr::Tx&) {
+        db_->transaction([&](slimr::Tx &) {
             std::vector<std::string> details = keep->details;
-            for (const auto& line : gone->details) {
+            for (const auto &line : gone->details) {
                 if (std::find(details.begin(), details.end(), line) == details.end()) {
                     details.push_back(line);
                 }
@@ -640,7 +654,7 @@ public:
     bool deleteEntry(int64_t id) {
         std::lock_guard<std::mutex> lock(mu_);
         bool deleted = false;
-        db_->transaction([&](slimr::Tx&) {
+        db_->transaction([&](slimr::Tx &) {
             auto rr = db_->run("DELETE FROM entries WHERE id = ?", {id});
             deleted = rr.changes > 0;
             db_->run("DELETE FROM entries_fts WHERE rowid = ?", {id});
@@ -649,7 +663,7 @@ public:
     }
 
     /// Run a read-only query (SELECT/WITH only) on a separate read-only connection; at most limit rows.
-    SqlResult sql(const std::string& query, int64_t limit = 200) {
+    SqlResult sql(const std::string &query, int64_t limit = 200) {
         if (!is_select_or_with(query)) {
             throw std::runtime_error("Only SELECT or WITH queries are allowed.");
         }
@@ -668,11 +682,10 @@ public:
         std::lock_guard<std::mutex> lock(mu_);
         auto rows = db_->all(
             "SELECT id, started_at, finished_at, since, until, status, stats, error FROM runs ORDER BY id DESC LIMIT ?",
-            std::vector<slimr::SqlValue>{bounded}
-        );
+            std::vector<slimr::SqlValue>{bounded});
         std::vector<Run> res;
         res.reserve(rows.size());
-        for (const auto& r : rows) {
+        for (const auto &r : rows) {
             Run run;
             run.id = r.at("id").get<int64_t>();
             run.startedAt = r.at("started_at").get<std::string>();
@@ -694,26 +707,24 @@ public:
     }
 
     /// Start a mining run; returns its id.
-    int64_t runStart(const std::string& since, const std::string& until) {
+    int64_t runStart(const std::string &since, const std::string &until) {
         std::lock_guard<std::mutex> lock(mu_);
         std::string now = format_iso_now();
         auto rr = db_->run(
             "INSERT INTO runs (started_at, since, until, status) VALUES (?, ?, ?, 'running')",
-            std::vector<slimr::SqlValue>{now, since, until}
-        );
+            std::vector<slimr::SqlValue>{now, since, until});
         return rr.lastInsertRowid;
     }
 
     /// Finish a mining run.
-    void runFinish(int64_t id, const std::string& status, const slimr::Json& stats, const std::optional<std::string>& error = std::nullopt) {
+    void runFinish(int64_t id, const std::string &status, const slimr::Json &stats, const std::optional<std::string> &error = std::nullopt) {
         std::lock_guard<std::mutex> lock(mu_);
         std::string now = format_iso_now();
         std::string statsStr = slimr::write_json(stats);
         slimr::SqlValue errVal = error.has_value() ? slimr::SqlValue(*error) : slimr::SqlValue(std::monostate{});
         db_->run(
             "UPDATE runs SET finished_at = ?, status = ?, stats = ?, error = ? WHERE id = ?",
-            std::vector<slimr::SqlValue>{now, status, statsStr, errVal, id}
-        );
+            std::vector<slimr::SqlValue>{now, status, statsStr, errVal, id});
     }
 
     /// Window end of the last successful run, or std::nullopt.
@@ -723,26 +734,27 @@ public:
     }
 
     /// Back up the database to destPath.
-    void backup(const std::string& destPath) {
+    void backup(const std::string &destPath) {
         std::lock_guard<std::mutex> lock(mu_);
         db_->backup(destPath);
     }
 
     /// Look up entry owning source.
-    std::optional<int64_t> sourceOwner(const Source& s) {
+    std::optional<int64_t> sourceOwner(const Source &s) {
         std::lock_guard<std::mutex> lock(mu_);
         return sourceOwnerLocked(s);
     }
 
-private:
+  private:
     std::string path_;
     mutable std::mutex mu_;
     std::unique_ptr<slimr::SqliteDb> db_;
 
     std::optional<Entry> getLocked(int64_t id) {
         auto row = db_->get("SELECT id, date, title, details FROM entries WHERE id = ?", {id});
-        if (!row) return std::nullopt;
-        const auto& r = *row;
+        if (!row)
+            return std::nullopt;
+        const auto &r = *row;
         int64_t eid = r.at("id").get<int64_t>();
         std::string date = r.at("date").get<std::string>();
         std::string title = r.at("title").get<std::string>();
@@ -750,49 +762,46 @@ private:
         return hydrateLocked(eid, date, title, details);
     }
 
-    std::optional<int64_t> sourceOwnerLocked(const Source& s) {
+    std::optional<int64_t> sourceOwnerLocked(const Source &s) {
         return db_->pluck<int64_t>(
             "SELECT entry_id FROM entry_sources WHERE kind = ? AND source_id = ?",
-            std::vector<slimr::SqlValue>{s.kind, s.id}
-        );
+            std::vector<slimr::SqlValue>{s.kind, s.id});
     }
 
     void attachRelationsLocked(
         int64_t id,
-        const std::vector<std::string>& tags,
-        const std::vector<Person>& people,
-        const std::vector<Source>& sources,
-        const std::vector<Link>& links
-    ) {
-        for (const auto& raw_tag : tags) {
+        const std::vector<std::string> &tags,
+        const std::vector<Person> &people,
+        const std::vector<Source> &sources,
+        const std::vector<Link> &links) {
+        for (const auto &raw_tag : tags) {
             std::string t = normalizeTag(raw_tag);
             if (!t.empty()) {
                 db_->run("INSERT OR IGNORE INTO entry_tags (entry_id, tag) VALUES (?, ?)", {id, t});
             }
         }
-        for (const auto& p : people) {
+        for (const auto &p : people) {
             if (!p.name.empty()) {
                 slimr::SqlValue contactVal = p.contact.has_value() ? slimr::SqlValue(*p.contact) : slimr::SqlValue(std::monostate{});
                 db_->run(
                     "INSERT INTO entry_people (entry_id, name, contact) VALUES (?, ?, ?) "
                     "ON CONFLICT (entry_id, name) DO UPDATE SET contact = COALESCE(excluded.contact, contact)",
-                    {id, p.name, contactVal}
-                );
+                    {id, p.name, contactVal});
             }
         }
-        for (const auto& s : sources) {
+        for (const auto &s : sources) {
             if (!s.kind.empty() && !s.id.empty()) {
                 db_->run("INSERT OR IGNORE INTO entry_sources (entry_id, kind, source_id) VALUES (?, ?, ?)", {id, s.kind, s.id});
             }
         }
-        for (const auto& l : links) {
+        for (const auto &l : links) {
             if (!l.url.empty()) {
                 db_->run("INSERT OR IGNORE INTO entry_links (entry_id, kind, label, url) VALUES (?, ?, ?, ?)", {id, l.kind, l.label, l.url});
             }
         }
     }
 
-    void applyPatchLocked(int64_t id, const EntryPatch& patch) {
+    void applyPatchLocked(int64_t id, const EntryPatch &patch) {
         if (patch.date) {
             db_->run("UPDATE entries SET date = ? WHERE id = ?", {normalizeDate(*patch.date), id});
         }
@@ -802,19 +811,19 @@ private:
         if (patch.details) {
             db_->run("UPDATE entries SET details = ? WHERE id = ?", {slimr::write_json(*patch.details), id});
         }
-        for (const auto& t : patch.removeTags) {
+        for (const auto &t : patch.removeTags) {
             db_->run("DELETE FROM entry_tags WHERE entry_id = ? AND tag = ?", {id, normalizeTag(t)});
         }
-        for (const auto& name : patch.removePeople) {
+        for (const auto &name : patch.removePeople) {
             db_->run("DELETE FROM entry_people WHERE entry_id = ? AND name = ?", {id, name});
         }
-        for (const auto& s : patch.removeSources) {
+        for (const auto &s : patch.removeSources) {
             db_->run("DELETE FROM entry_sources WHERE entry_id = ? AND kind = ? AND source_id = ?", {id, s.kind, s.id});
         }
-        for (const auto& url : patch.removeLinks) {
+        for (const auto &url : patch.removeLinks) {
             db_->run("DELETE FROM entry_links WHERE entry_id = ? AND url = ?", {id, url});
         }
-        for (const auto& s : patch.addSources) {
+        for (const auto &s : patch.addSources) {
             auto owner = sourceOwnerLocked(s);
             if (owner && *owner != id) {
                 throw std::runtime_error("Source " + s.kind + ":" + s.id + " already belongs to entry " + std::to_string(*owner) + ".");
@@ -828,27 +837,29 @@ private:
     void reindexLocked(int64_t id) {
         auto entryOpt = getLocked(id);
         db_->run("DELETE FROM entries_fts WHERE rowid = ?", {id});
-        if (!entryOpt) return;
-        const auto& entry = *entryOpt;
+        if (!entryOpt)
+            return;
+        const auto &entry = *entryOpt;
         std::vector<std::string> lines = entry.details;
-        for (const auto& t : entry.tags) {
+        for (const auto &t : entry.tags) {
             lines.push_back("#" + t);
         }
-        for (const auto& p : entry.people) {
+        for (const auto &p : entry.people) {
             lines.push_back(p.name);
         }
-        for (const auto& l : entry.links) {
+        for (const auto &l : entry.links) {
             lines.push_back(l.label);
         }
         std::string body;
         for (size_t i = 0; i < lines.size(); ++i) {
-            if (i > 0) body += "\n";
+            if (i > 0)
+                body += "\n";
             body += lines[i];
         }
         db_->run("INSERT INTO entries_fts (rowid, title, body) VALUES (?, ?, ?)", {id, entry.title, body});
     }
 
-    Entry hydrateLocked(int64_t id, const std::string& date, const std::string& title, const std::string& detailsJson) {
+    Entry hydrateLocked(int64_t id, const std::string &date, const std::string &title, const std::string &detailsJson) {
         Entry entry;
         entry.id = id;
         entry.date = date;
@@ -862,7 +873,7 @@ private:
         entry.tags = std::move(tagRows);
 
         auto peopleRows = db_->all("SELECT name, contact FROM entry_people WHERE entry_id = ? ORDER BY rowid", std::vector<slimr::SqlValue>{id});
-        for (const auto& r : peopleRows) {
+        for (const auto &r : peopleRows) {
             Person p;
             p.name = r.at("name").get<std::string>();
             if (r.contains("contact") && r.at("contact").is_string()) {
@@ -872,7 +883,7 @@ private:
         }
 
         auto sourceRows = db_->all("SELECT kind, source_id FROM entry_sources WHERE entry_id = ? ORDER BY rowid", std::vector<slimr::SqlValue>{id});
-        for (const auto& r : sourceRows) {
+        for (const auto &r : sourceRows) {
             Source s;
             s.kind = r.at("kind").get<std::string>();
             s.id = r.at("source_id").get<std::string>();
@@ -880,7 +891,7 @@ private:
         }
 
         auto linkRows = db_->all("SELECT kind, label, url FROM entry_links WHERE entry_id = ? ORDER BY rowid", std::vector<slimr::SqlValue>{id});
-        for (const auto& r : linkRows) {
+        for (const auto &r : linkRows) {
             Link l;
             l.kind = r.at("kind").get<std::string>();
             l.label = r.at("label").get<std::string>();

@@ -45,17 +45,17 @@ struct MineConfig {
 };
 
 inline std::filesystem::path personalLogConfigDir() {
-    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg) {
+    if (const char *xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg) {
         return std::filesystem::path(xdg) / "personal-log";
     }
-    if (const char* home = std::getenv("HOME"); home && *home) {
+    if (const char *home = std::getenv("HOME"); home && *home) {
         return std::filesystem::path(home) / ".config/personal-log";
     }
     throw std::runtime_error("Set HOME or XDG_CONFIG_HOME for personal-log configuration");
 }
 
 inline std::filesystem::path mineConfigPath() {
-    if (const char* path = std::getenv("PERSONAL_LOG_MINE_CONFIG"); path && *path) {
+    if (const char *path = std::getenv("PERSONAL_LOG_MINE_CONFIG"); path && *path) {
         return path;
     }
     return personalLogConfigDir() / "mine.json";
@@ -73,8 +73,8 @@ inline std::string validateCalendarId(std::string id) {
     return id;
 }
 
-inline std::string suggestCalendarId(const MineConfig& config) {
-    const char* overrideId = std::getenv("PERSONAL_LOG_SUGGEST_CALENDAR_ID");
+inline std::string suggestCalendarId(const MineConfig &config) {
+    const char *overrideId = std::getenv("PERSONAL_LOG_SUGGEST_CALENDAR_ID");
     auto id = validateCalendarId(overrideId && *overrideId ? overrideId : config.suggestCalendarId);
     if (id == "primary" || config.calendars.contains(id)) {
         throw std::runtime_error("Mining suggestion calendar must be separate from source calendars");
@@ -82,7 +82,7 @@ inline std::string suggestCalendarId(const MineConfig& config) {
     return id;
 }
 
-inline MineConfig loadMineConfig(const std::filesystem::path& path = mineConfigPath()) {
+inline MineConfig loadMineConfig(const std::filesystem::path &path = mineConfigPath()) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error("Mining configuration is required: set PERSONAL_LOG_MINE_CONFIG or create personal-log/mine.json in your XDG config directory");
@@ -96,31 +96,33 @@ inline MineConfig loadMineConfig(const std::filesystem::path& path = mineConfigP
     if (file.bad() || error) {
         throw std::runtime_error("Invalid mining configuration JSON: all documented fields are required");
     }
-    auto requireText = [](const std::string& value) {
+    auto requireText = [](const std::string &value) {
         if (value.empty() || std::all_of(value.begin(), value.end(), [](unsigned char ch) {
                 return std::isspace(ch);
-            }) || std::any_of(value.begin(), value.end(), [](unsigned char ch) {
+            }) ||
+            std::any_of(value.begin(), value.end(), [](unsigned char ch) {
                 return ch < 32 || ch == 127;
             })) {
             throw std::runtime_error("Invalid mining configuration: empty or control-character field");
         }
     };
-    for (const auto* text : {&config.deadlinesTasklist, &config.gmailAccount, &config.selfName,
-                            &config.timeZone, &config.eventSuggestionNote, &config.deadlineNote,
-                            &config.medicalExpensesNote, &config.medicalExpensesSince,
-                            &config.kidsSchoolFolder, &config.familySurname}) {
+    for (const auto *text : {&config.deadlinesTasklist, &config.gmailAccount, &config.selfName,
+                             &config.timeZone, &config.eventSuggestionNote, &config.deadlineNote,
+                             &config.medicalExpensesNote, &config.medicalExpensesSince,
+                             &config.kidsSchoolFolder, &config.familySurname}) {
         requireText(*text);
     }
-    for (const auto* values : {&config.keepDomains, &config.contactGroups, &config.familyAliases}) {
-        for (const auto& value : *values) requireText(value);
+    for (const auto *values : {&config.keepDomains, &config.contactGroups, &config.familyAliases}) {
+        for (const auto &value : *values)
+            requireText(value);
     }
-    for (const auto* values : {&config.calendars, &config.medsNotes, &config.kidsDrive, &config.whoNames}) {
-        for (const auto& [key, value] : *values) {
+    for (const auto *values : {&config.calendars, &config.medsNotes, &config.kidsDrive, &config.whoNames}) {
+        for (const auto &[key, value] : *values) {
             requireText(key);
             requireText(value);
         }
     }
-    for (const auto& chat : config.whatsappChats) {
+    for (const auto &chat : config.whatsappChats) {
         requireText(chat.name);
         requireText(chat.kind);
     }
@@ -128,7 +130,7 @@ inline MineConfig loadMineConfig(const std::filesystem::path& path = mineConfigP
     if (!std::regex_match(config.medicalExpensesSince, sincePattern)) {
         throw std::runtime_error("Invalid mining configuration: medicalExpensesSince must be YYYY.MM.DD");
     }
-    for (const auto& [id, name] : config.calendars) {
+    for (const auto &[id, name] : config.calendars) {
         (void)name;
         if (validateCalendarId(id) != id) {
             throw std::runtime_error("Invalid mining configuration source calendar id");

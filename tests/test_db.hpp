@@ -17,8 +17,7 @@ inline slimr::Json make_mcp_req(
     slimr::Json id,
     std::string_view method,
     slimr::Json params = slimr::json_obj(),
-    std::string_view version = slimr::kMcpProtocolVersion
-) {
+    std::string_view version = slimr::kMcpProtocolVersion) {
     slimr::Json meta = slimr::json_obj();
     meta["io.modelcontextprotocol/protocolVersion"] = std::string(version);
     meta["io.modelcontextprotocol/clientCapabilities"] = slimr::json_obj();
@@ -38,8 +37,7 @@ inline NewEntry make_entry(
     std::vector<std::string> details = {},
     std::vector<Person> people = {},
     std::vector<Source> sources = {},
-    std::vector<Link> links = {}
-) {
+    std::vector<Link> links = {}) {
     return NewEntry{
         .date = std::move(date),
         .title = std::move(title),
@@ -47,8 +45,7 @@ inline NewEntry make_entry(
         .details = std::move(details),
         .people = std::move(people),
         .sources = std::move(sources),
-        .links = std::move(links)
-    };
+        .links = std::move(links)};
 }
 
 // ============================================================================
@@ -68,18 +65,14 @@ TEST_SUITE("ftsQuery") {
 TEST_SUITE("AppDb") {
     TEST_CASE("add, get, and skip entries whose source is already logged") {
         AppDb db(":memory:");
-        auto first = db.add({
-            make_entry("2030.11.04", "Riley OT school observation", {"riley", "health/therapy"},
-                       {}, {Person{.name = "Ciara Baxter", .contact = std::nullopt}},
-                       {Source{.kind = "gm", .id = "abc"}})
-        });
+        auto first = db.add({make_entry("2030.11.04", "Riley OT school observation", {"riley", "health/therapy"},
+                                        {}, {Person{.name = "Ciara Baxter", .contact = std::nullopt}},
+                                        {Source{.kind = "gm", .id = "abc"}})});
         CHECK(first.added.size() == 1);
 
-        auto again = db.add({
-            make_entry("2030.11.04", "Dup", {"riley", "health/therapy"},
-                       {}, {}, {Source{.kind = "gm", .id = "abc"}}),
-            make_entry("2030.11.04", "New one")
-        });
+        auto again = db.add({make_entry("2030.11.04", "Dup", {"riley", "health/therapy"},
+                                        {}, {}, {Source{.kind = "gm", .id = "abc"}}),
+                             make_entry("2030.11.04", "New one")});
         CHECK(again.added.size() == 1);
         REQUIRE(again.skipped.size() == 1);
         CHECK(again.skipped[0].index == 0);
@@ -99,16 +92,15 @@ TEST_SUITE("AppDb") {
 
     TEST_CASE("search by keywords, tags (with prefix), person and dates") {
         AppDb db(":memory:");
-        db.add({
-            make_entry("2030.10.21", "Casey OT observation", {"casey", "health/therapy"}),
-            make_entry("2030.11.04", "Riley OT school observation", {"riley", "health/therapy"},
-                       {"At the school, with Ciara"}, {Person{.name = "Ciara Baxter", .contact = std::nullopt}}),
-            make_entry("2029.03.01", "Dentist", {"riley", "health/dental"})
-        });
+        db.add({make_entry("2030.10.21", "Casey OT observation", {"casey", "health/therapy"}),
+                make_entry("2030.11.04", "Riley OT school observation", {"riley", "health/therapy"},
+                           {"At the school, with Ciara"}, {Person{.name = "Ciara Baxter", .contact = std::nullopt}}),
+                make_entry("2029.03.01", "Dentist", {"riley", "health/dental"})});
 
         auto obs = db.search(SearchFilters{.query = "observation"});
         std::vector<std::string> obsDates;
-        for (const auto& e : obs) obsDates.push_back(e.date);
+        for (const auto &e : obs)
+            obsDates.push_back(e.date);
         std::sort(obsDates.begin(), obsDates.end());
         CHECK(obsDates == std::vector<std::string>{"2030.10.21", "2030.11.04"});
 
@@ -122,12 +114,10 @@ TEST_SUITE("AppDb") {
 
     TEST_CASE("update, merge and delete keep the search index current") {
         AppDb db(":memory:");
-        auto res = db.add({
-            make_entry("2030.11.04", "Riley OT school observation", {"riley", "health/therapy"},
-                       {}, {}, {Source{.kind = "cal", .id = "c1"}}),
-            make_entry("2030.11.04", "OT visit at school", {"riley", "health/therapy"},
-                       {"Report to follow"}, {}, {Source{.kind = "gm", .id = "g1"}})
-        });
+        auto res = db.add({make_entry("2030.11.04", "Riley OT school observation", {"riley", "health/therapy"},
+                                      {}, {}, {Source{.kind = "cal", .id = "c1"}}),
+                           make_entry("2030.11.04", "OT visit at school", {"riley", "health/therapy"},
+                                      {"Report to follow"}, {}, {Source{.kind = "gm", .id = "g1"}})});
         REQUIRE(res.added.size() == 2);
         int64_t keep = res.added[0];
         int64_t dup = res.added[1];
@@ -145,13 +135,15 @@ TEST_SUITE("AppDb") {
         auto merged = db.merge(keep, dup);
         REQUIRE(merged.has_value());
         std::vector<std::string> sourceIds;
-        for (const auto& s : merged->sources) sourceIds.push_back(s.id);
+        for (const auto &s : merged->sources)
+            sourceIds.push_back(s.id);
         std::sort(sourceIds.begin(), sourceIds.end());
         CHECK(sourceIds == std::vector<std::string>{"c1", "g1"});
 
         bool hasReport = false;
-        for (const auto& l : merged->details) {
-            if (l.find("Report to follow") != std::string::npos) hasReport = true;
+        for (const auto &l : merged->details) {
+            if (l.find("Report to follow") != std::string::npos)
+                hasReport = true;
         }
         CHECK(hasReport);
         CHECK(!db.get(dup).has_value());
@@ -225,14 +217,13 @@ TEST_SUITE("parseYearNote") {
         auto parsed = parseYearNote(NOTE);
         REQUIRE(parsed.entries.size() == 2);
 
-        const auto& meds = parsed.entries[0];
+        const auto &meds = parsed.entries[0];
         CHECK(meds.date == "2030.06.03");
         CHECK(meds.title == "Example medicine started, Example Clinic");
         CHECK(meds.tags == std::vector<std::string>{"alex", "health/meds"});
         CHECK(meds.details == std::vector<std::string>{
-            "First consultation with Dr Taylor Example",
-            "💬 2030.06.03 Jamie: \"Example attributed quote\""
-        });
+                                  "First consultation with Dr Taylor Example",
+                                  "💬 2030.06.03 Jamie: \"Example attributed quote\""});
         REQUIRE(meds.people.size() == 2);
         CHECK(meds.people[0].name == "Taylor Example (Example Clinic)");
         CHECK(!meds.people[0].contact.has_value());
@@ -253,7 +244,7 @@ TEST_SUITE("parseYearNote") {
         CHECK(meds.links[1].label == "2029.03.24 - Break schedule");
         CHECK(meds.links[1].url == "https://drive.google.com/file/d/1/view");
 
-        const auto& trip = parsed.entries[1];
+        const auto &trip = parsed.entries[1];
         CHECK(trip.date == "2028.07");
         CHECK(trip.title == "Example shuttle booked");
         CHECK(trip.tags == std::vector<std::string>{"alex", "trip"});
@@ -267,7 +258,6 @@ TEST_SUITE("parseYearNote") {
 // ============================================================================
 // 4. App & MCP Tools
 // ============================================================================
-
 
 TEST_SUITE("app tools and resources") {
     TEST_CASE("exports all required tools, resources, and status schema") {
@@ -288,7 +278,7 @@ TEST_SUITE("app tools and resources") {
         CHECK(app.tools().contains("backup"));
         CHECK(app.tools().contains("mine"));
 
-        const auto& statusTool = app.tools().at("status");
+        const auto &statusTool = app.tools().at("status");
         CHECK(statusTool.inputSchema.contains("properties"));
         CHECK(statusTool.inputSchema["properties"].contains("json"));
 
@@ -327,8 +317,7 @@ TEST_SUITE("app tools and resources") {
         slimr::Json addParams = slimr::json_obj();
         addParams["name"] = "add";
         addParams["arguments"] = slimr::Json::object_t{
-            {"entries", slimr::Json::array_t{newEntry}}
-        };
+            {"entries", slimr::Json::array_t{newEntry}}};
         auto addReq = make_mcp_req(10, "tools/call", std::move(addParams));
 
         auto resp = app.dispatchMcpJson(addReq);
@@ -338,8 +327,7 @@ TEST_SUITE("app tools and resources") {
         slimr::Json searchParams = slimr::json_obj();
         searchParams["name"] = "search";
         searchParams["arguments"] = slimr::Json::object_t{
-            {"query", "Test MCP"}
-        };
+            {"query", "Test MCP"}};
         auto searchReq = make_mcp_req(11, "tools/call", std::move(searchParams));
         auto searchResp = app.dispatchMcpJson(searchReq);
         CHECK(!searchResp.contains("error"));
@@ -363,8 +351,7 @@ TEST_SUITE("app tools and resources") {
         importParams["name"] = "import";
         importParams["arguments"] = slimr::Json::object_t{
             {"dir", temp.path.string()},
-            {"dryRun", true}
-        };
+            {"dryRun", true}};
         auto req = make_mcp_req(20, "tools/call", std::move(importParams));
         auto resp = app.dispatchMcpJson(req);
         CHECK(!resp.contains("error"));
