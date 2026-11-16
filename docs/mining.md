@@ -5,8 +5,8 @@
 Mining is opt-in. Before running it, create a **private** configuration file:
 
 1. Copy [`docs/mine.example.json`](mine.example.json) to
-   `$XDG_CONFIG_HOME/personal-log/mine.json`, or `~/.config/personal-log/mine.json`
-   when `XDG_CONFIG_HOME` is unset.
+   `$(brew --prefix)/etc/personal-log-mcp/mine.json` (or point
+   `PERSONAL_LOG_MINE_CONFIG` at another path).
 2. Replace every synthetic identity, address, calendar/task-list identifier,
    chat name, note path and document folder with destinations you explicitly
    authorize. Use a separate private suggestion calendar, never a source
@@ -31,8 +31,8 @@ creation). Empty collections select no sources or targets for that collection.
 Medical examples are fictional; supply only information you are authorized to
 process.
 
-Optional private `conventions.md` and `recall.md` files in the same XDG
-`personal-log` directory replace the corresponding public MCP resources.
+Optional private `conventions.md` and `recall.md` files in the same
+`$(brew --prefix)/etc/personal-log-mcp/` directory replace the corresponding public MCP resources.
 Keep household guidance, personal history and private note locations there.
 
 1. **Window selection:** Reads `lastSuccessfulUntil` from the `runs` table (defaulting to a lookback window) up to `now`.
@@ -48,8 +48,8 @@ Keep household guidance, personal history and private note locations there.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PERSONAL_LOG_DB` | `~/.local/share/personal-log/log.db` | Path to the SQLite + FTS5 log database |
-| `PERSONAL_LOG_MINE_CONFIG` | XDG `personal-log/mine.json` | Required private mining configuration |
+| `PERSONAL_LOG_DB` | `$(brew --prefix)/var/personal-log-mcp/log.db` | Path to the SQLite + FTS5 log database |
+| `PERSONAL_LOG_MINE_CONFIG` | `$(brew --prefix)/etc/personal-log-mcp/mine.json` | Required private mining configuration |
 | `PERSONAL_LOG_SUGGEST_CALENDAR_ID` | Configured `suggestCalendarId` | Suggestion destination override; validated before mining side effects |
 | `ASSISTANT_LLM_DEFAULT` | `deepseek-v4-pro` | Model for drafting log entries, Meds, and Contacts (`agy:<model>`, `gemini-...`, or DeepSeek) |
 | `ASSISTANT_LLM_FAST` | `deepseek-flash` | Model for high-volume email/WhatsApp chunk triage |

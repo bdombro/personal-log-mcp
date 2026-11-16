@@ -5,40 +5,42 @@ User installation, configuration and compatibility status are in the
 alternative transport schemas and validation commands. A client configuration
 example is not a claim of verified July/OAuth interoperability.
 
-Current HTTP source builds use local slimr and libhv overlays. The pinned
-published registry baseline predates these HTTP changes; do not claim that
-baseline builds the current HTTP app without overrides. CI configuration is
-not evidence that a runner/platform/client has passed.
-
 ## App Architecture
 
-The standalone MCP (stdio + Streamable HTTP), JSON CLI, and scheduled mining command are implemented in C++26 on `slimr-cpp`; data lives in the SQLite + FTS5 database.
+The standalone MCP (stdio + Streamable HTTP), JSON CLI, and scheduled mining command are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
 
 ```text
 personal-log-mcp/
 ├── Formula/
-│   └── personal-log-mcp.rb   # Homebrew formula + loopback HTTP service definition
+│   └── personal-log-mcp.rb   # Homebrew formula (prebuilt macOS/Linux binaries) + HTTP service definition
 ├── .claude-plugin/           # Claude Code plugin & marketplace manifests (HTTP 127.0.0.1:10002)
 ├── .cursor-plugin/           # Cursor plugin manifest (HTTP 127.0.0.1:10002)
+├── VERSION                   # Release version compiled into the binary
+├── CHANGELOG.md              # Unreleased and released changes
 ├── vcpkg.json                # Package dependencies installed under build/deps/
+├── vcpkg-configuration.json  # Builtin + slimr-* git registries (baselines moved by `just upgrade-deps`)
+├── triplets/                 # vcpkg overlay triplets (macOS 15.0 floor, Linux libc++)
 ├── CMakeLists.txt            # App/test targets, imported dependencies, safety settings
-├── justfile                  # CMake/Ninja configure, test, build, lint, test-mcp, Homebrew lifecycle
+├── justfile                  # cpp-templates recipes: build, test, lint, test-mcp, release, Homebrew service lifecycle
 ├── README.md                 # User & operator documentation
 ├── AGENTS.md                 # Maintainer & AI agent conventions
 ├── docs/
 │   ├── conventions.md        # Log entry & tag conventions (`personal-log://conventions`)
 │   └── recall.md             # Multi-source recall playbook (`personal-log://recall`)
 ├── scripts/
-│   ├── dev-formula.sh        # Safe stage/reset helper for local Homebrew testing
-│   └── test-mcp.mjs          # July 2026-07-28 stdio + ephemeral HTTP smoke test
+│   ├── doctor.sh             # Toolchain and required-tool checks (`just doctor`)
+│   ├── formula-shared.ts     # Formula rendering shared by release tooling
+│   ├── release.ts            # Release workflow helper (`just release`)
+│   └── test-mcp.ts           # July 2026-07-28 stdio + ephemeral HTTP smoke test
 ├── src/
 │   ├── db.hpp                # `AppDb` over `sqlite.hpp`: schema v1, WAL, per-DB mutex, FTS5 `entries_fts`, CRUD, merge, read-only `sql`, online `backup`
 │   ├── import.hpp            # `parseYearNote` parser for legacy Obsidian `YYYY.md` yearly notes
 │   ├── mine.hpp              # Scheduled mining pipeline (Gmail, Calendar, WhatsApp -> log, Deadlines, AI-Suggests, Meds, Contacts, Expenses) & Drive `backupLog`
-│   ├── mine_config.hpp       # Strict lazy loader for `PERSONAL_LOG_MINE_CONFIG` / XDG `mine.json`
+│   ├── mine_config.hpp       # Strict lazy loader for `PERSONAL_LOG_MINE_CONFIG` / `$(brew --prefix)/etc/personal-log-mcp/mine.json`
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
 │   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
-│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 127.0.0.1:10002) entrypoint
+│   ├── log_file.hpp          # `--log-file` redirection and 10 MiB rotation (verbatim template file)
+│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 0.0.0.0:10002, `--log-file`) entrypoint
 ├── tests/
 │   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
 │   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
@@ -62,7 +64,7 @@ personal-log-mcp/
 
 `personal-log-mcp` is a standalone C++26 binary exposing three invocation modes:
 
-- **Streamable HTTP (`http`):** `personal-log-mcp http` (default endpoint `http://127.0.0.1:10002/mcp`, `--host 127.0.0.1 --port 10002`; `--port 0` requires `--allow-ephemeral-port`; non-loopback binds are refused).
+- **Streamable HTTP (`http`):** `personal-log-mcp http` (binds `0.0.0.0:10002`, local endpoint `http://127.0.0.1:10002/mcp`; `--host <addr>` and `--port <n>` override, `--port 0` picks an ephemeral port; `--log-file <path>` redirects output with 10 MiB rotation).
 - **stdio MCP (`mcp`):** `personal-log-mcp mcp` (newline-delimited JSON-RPC over stdin/stdout).
 - **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
 
@@ -70,7 +72,7 @@ personal-log-mcp/
 
 ### Streamable HTTP (Recommended)
 
-Run via Homebrew (`just install && just start` or `just install-local && just start`) or directly with `personal-log-mcp http`.
+Run via Homebrew (`just install`, which also starts the service) or directly with `personal-log-mcp http`.
 
 **Claude Code (`.mcp.json` or `.claude-plugin/plugin.json`):**
 
@@ -112,37 +114,51 @@ Run via Homebrew (`just install && just start` or `just install-local && just st
 
 ### Homebrew Service Lifecycle
 
-`Formula/personal-log-mcp.rb` installs `personal-log-mcp` and configures a loopback `brew services` daemon (`http --host 127.0.0.1 --port 10002`, `keep_alive true`, logs in `var/log/personal-log-mcp.log`):
+`Formula/personal-log-mcp.rb` installs the prebuilt `personal-log-mcp` binary and configures a `brew services` daemon (`/bin/sh -c` sourcing `$(brew --prefix)/etc/personal-log-mcp/env`, then `http --log-file $(brew --prefix)/var/log/personal-log-mcp.log`, `keep_alive true`, working dir `$(brew --prefix)/var/personal-log-mcp`):
 
 ```bash
-just install          # Tap and install from release formula
-just install-local    # Build Release binary, stage local formula, install, and restore formula
-just reinstall-local  # Stop service if running, rebuild, and reinstall local formula
-just start            # Start brew service and verify http://127.0.0.1:10002/mcp readiness
-just stop             # Stop brew service
-just restart          # Restart brew service and verify readiness
-just status           # Inspect brew service status and probe server/discover
-just uninstall        # Stop service and uninstall formula
+just install          # Clean-install the released formula from GitHub, brew test it, start the service
+just daemon-start     # Start the brew service and wait for server/discover
+just daemon-stop      # Stop the brew service
+just daemon-restart   # Restart the brew service and wait for readiness
+just daemon-status    # Inspect brew service status and probe server/discover
+just daemon-logs      # Follow the service log
+just uninstall        # Stop the service, uninstall the formula, remove the tap
 ```
 
 ## Building & Testing
 
-Build with Clang/C++26 and libc++ FAST hardening, CMake 3.31+, Ninja, [just](https://just.systems), [vcpkg](https://vcpkg.io), and a compatible clang-tidy. Set `VCPKG_ROOT` to a bootstrapped checkout and put `vcpkg` on `PATH`; configure the local overlay explicitly:
+Build with Clang/C++26 and libc++ FAST hardening, CMake 3.31+, Ninja, [just](https://just.systems), [vcpkg](https://vcpkg.io) and Homebrew `llvm@23` (clang-format, clang-tidy). `just doctor` checks the toolchain and prints fixes. Set `VCPKG_ROOT` to a bootstrapped checkout and put `vcpkg` on `PATH`; `slimr-*` packages resolve from their pinned git registries in `vcpkg-configuration.json`, and `just upgrade-deps` moves every baseline at once.
+
+`just configure`, `test`, `build`, and `lint` automatically run `deps`, installing manifest dependencies under `build/deps/`. CMake uses installed `slimr::mcp_http` (`slimr-mcp[http]`) and `slimr::sqlite` targets with static SQLite/FTS5; manifest auto-install is disabled.
+
+Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. macOS builds use Apple clang (`/usr/bin/clang++`) with a 15.0 deployment floor; Linux builds use `llvm@23` clang++ with libc++. `CXX` overrides both; set it before the first configure, since CMake caches the compiler. Set `LLVM_BIN` to override the `llvm@23` binary directory for `clang-format` and `clang-tidy`. CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME, `HOMEBREW_PREFIX` and temporary directories.
 
 ```bash
-export VCPKG_OVERLAY_PORTS="$VCPKG_ROOT/local-ports"
+just doctor   # Check required tools and C++26 support
+just test     # Run DB, FTS5, import, HTTP, concurrency, log-file, and mock mining tests with ASan + UBSan
+just test "<case>"  # Run only matching doctest cases (Debug, BUGSINK_DSN="")
+just build    # Build the Release binary at build/bin/personal-log-mcp (no tests)
+just lint     # clang-format check and clang-tidy bug-finding checks
+just test-mcp # Verify July 2026-07-28 stdio + ephemeral HTTP discovery and tools/list
 ```
 
-`just configure`, `test`, `build`, and `lint` automatically run `deps`, installing manifest dependencies under `build/deps/`. CMake uses installed `slimr::mcp_http` (`slimr-mcp[http]`) and `slimr::sqlite` targets with static SQLite/FTS5; manifest auto-install is disabled. Local overlay ports must already be registered; no source-checkout include overrides or global executable installs are used. Registry publication is separate.
+`just test` with no filter runs CTest, which points HOME, `HOMEBREW_PREFIX` and `TMPDIR` at scratch paths and `PERSONAL_LOG_MINE_CONFIG` at the test fixture. `just test "<case>"` runs the test binary directly with only `BUGSINK_DSN=` set, so path tests isolate their own env. `just test-mcp` runs the server with an isolated environment, no external CLI PATH or credentials, and Bugsink disabled; it never invokes mining, cloud, or database tools.
 
-Debug sanitizers and Release IPO builds have separate `build/cmake/Debug/` and `build/cmake/Release/` graphs. Both enable libc++ hardening and zero automatic-variable initialization; Debug adds ASan and fatal UBSan. Set `CXX` before the first configure to override the default Apple compiler on macOS or `clang++` on Linux; subsequent configures preserve CMake's cached compiler even when `clang-tidy` is added to `PATH`. `just lint` also honors `CLANG_TIDY` (defaulting to `clang-tidy`). CTest runs only synthetic/mock suites with a finite timeout and isolated repo-local HOME/XDG/temporary directories. Release builds run those tests too.
+Run the direct binary on a separate dev port so it doesn't collide with the service:
 
 ```bash
-just test     # Run DB, FTS5, import, HTTP, concurrency, and mock mining tests with ASan + UBSan
-just build    # Build/test Release binary at build/bin/personal-log-mcp
-just lint     # Analyze app and test translation units using compile_commands.json
-just test-mcp # Verify July 2026-07-28 stdio + ephemeral HTTP discovery, tools/list, status, and legacy rejection
-just run --help # Run the existing Release binary without rebuilding
+PERSONAL_LOG_DB="$PWD/build/dev.db" ./build/bin/personal-log-mcp http --port 20002
 ```
 
-`just test-mcp` runs the server with an isolated HOME/XDG environment, no external CLI PATH or credentials, and Bugsink disabled; it never invokes mining, cloud, or database tools. Linux/macOS PR CI uses the same commands and requires the tested full `VCPKG_REF` commit variable; slimr packages use the pinned public registry without a dependency token. Linux execution and remote merge-gate enforcement are not claimed by local macOS verification.
+On Linux (`ubuntu-24.04`), install `llvm@23` via Homebrew and enable lingering so `brew services` systemd user units survive logout (`loginctl enable-linger "$USER"`).
+
+## Release
+
+Add a line under `## Unreleased` in `CHANGELOG.md`, push to `main`, then run:
+
+```bash
+just release patch   # or minor / major
+```
+
+The release workflow runs `test.yml` on each platform, bumps `VERSION`, builds the macOS arm64 and Linux x64 binaries, updates the formula and tags the release.
