@@ -3,6 +3,7 @@
 
 #include "test_db.hpp"
 #include "test_http.hpp"
+#include "test_log_file.hpp"
 
 #if __has_include("test_mine.hpp")
 #include "test_mine.hpp"
