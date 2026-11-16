@@ -77,14 +77,13 @@ existing servers):
 ```
 
 Use either an explicit server entry or a plugin manifest, not both.
-Alternative client schemas and stdio configuration are in the
-[developer reference](docs/development.md). Or run over stdio
-(`personal-log-mcp mcp`) or the direct CLI
+Alternative client schemas are in the
+[developer reference](docs/development.md), or run the direct CLI
 (`personal-log-mcp <tool> ['{"arg":"val"}']`).
 
 ## Tools & CLI Commands
 
-Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:10002/mcp`), stdio MCP (`personal-log-mcp mcp`), and the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resource URIs are unchanged.
+Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:10002/mcp`) and the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resource URIs are unchanged.
 
 | Tool | Mutating | Thread-Safe HTTP | Description |
 | --- | --- | --- | --- |

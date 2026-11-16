@@ -2,7 +2,7 @@
 #include "log_file.hpp"
 #include <mcp_http.hpp>
 
-#include <cstring>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) try {
     std::optional<std::string> logFile;
     std::vector<char *> filteredArgv;
     if (argc > 0 && argv != nullptr) {
@@ -45,20 +45,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    bool isMcpMode = false;
-    for (size_t i = 1; i < filteredArgv.size(); ++i) {
-        if (std::strcmp(filteredArgv[i], "--skip-checks") == 0)
-            continue;
-        isMcpMode = (std::strcmp(filteredArgv[i], "mcp") == 0);
-        break;
-    }
-
     std::unique_ptr<app_log::LogFileGuard> logGuard;
     if (logFile.has_value()) {
-        if (isMcpMode) {
-            std::cerr << "--log-file cannot be used with mcp stdio mode\n";
-            return 1;
-        }
         auto opened = app_log::LogFileGuard::open(*logFile);
         if (!opened) {
             std::cerr << opened.error() << "\n";
@@ -70,4 +58,10 @@ int main(int argc, char *argv[]) {
     auto app = personal_log::make_personal_log_app();
     slimr::enable_http(app, slimr::HttpServerOptions{.port = 10002});
     return app.run(static_cast<int>(filteredArgv.size()), filteredArgv.data());
+} catch (const std::exception &e) {
+    std::cerr << "personal-log-mcp: fatal: " << e.what() << "\n";
+    return 1;
+} catch (...) {
+    std::cerr << "personal-log-mcp: fatal: unknown error\n";
+    return 1;
 }

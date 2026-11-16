@@ -172,11 +172,30 @@ struct BackupInput {
     slimr::OptField<std::optional<std::string>, "Destination path for SQLite backup (optional)."> destPath;
 };
 
+struct BackupOutput {
+    std::string file;
+    bool created = false;
+    std::vector<std::string> pruned;
+    std::optional<std::string> status;
+    std::optional<std::string> destination;
+
+    bool operator==(const BackupOutput &) const = default;
+};
+
 struct MineInput {
     slimr::OptField<std::optional<std::string>, "First day (default: last run's end minus 1 day)."> since;
     slimr::OptField<std::optional<std::string>, "Last day (default: today)."> until;
     slimr::OptField<std::optional<bool>, "Collect, triage and draft; write nothing and don't record the run."> dryRun;
     slimr::OptField<std::optional<bool>, "Skip the daily backup."> noBackup;
+};
+
+struct MineOutput {
+    std::string since;
+    std::string until;
+    bool dryRun = false;
+    std::vector<int64_t> added;
+
+    bool operator==(const MineOutput &) const = default;
 };
 
 // ============================================================================
@@ -451,55 +470,52 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
         "backup",
         "Back up the log database to Google Drive (one gzipped copy per day; 30 dailies and 12 monthlies kept).",
         slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = false},
-        [get_db](const BackupInput &) -> slimr::Json {
+        [get_db](const BackupInput &) -> BackupOutput {
             auto res = backupLog(get_db());
-            slimr::Json j = slimr::Json::object_t{};
-            j["file"] = res.file;
-            j["created"] = res.created;
-            slimr::Json::array_t pr;
-            for (const auto &p : res.pruned)
-                pr.push_back(p);
-            j["pruned"] = pr;
-            return j;
+            return BackupOutput{
+                .file = std::move(res.file),
+                .created = res.created,
+                .pruned = std::move(res.pruned),
+            };
         });
 
     app.tool<MineInput>(
         "mine",
         "Mine new Gmail, calendar and WhatsApp activity into the log (entries, deadlines, suggested events), then back up.",
         slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = true},
-        [get_db](const MineInput &in) -> slimr::Json {
+        [get_db](const MineInput &in) -> MineOutput {
             const auto config = loadMineConfig();
             MineOptions opts;
             opts.since = in.since.get();
             opts.until = in.until.get();
             opts.dryRun = in.dryRun.get().value_or(false);
             auto res = runMine(get_db(), opts, config);
-            slimr::Json j = slimr::Json::object_t{};
-            j["since"] = res.since;
-            j["until"] = res.until;
-            j["dryRun"] = res.dryRun;
-            slimr::Json::array_t ad;
-            for (auto a : res.added)
-                ad.push_back(a);
-            j["added"] = ad;
-            return j;
+            return MineOutput{
+                .since = std::move(res.since),
+                .until = std::move(res.until),
+                .dryRun = res.dryRun,
+                .added = std::move(res.added),
+            };
         });
 #else
     app.tool<BackupInput>(
         "backup",
         "Back up the log database to Google Drive (one gzipped copy per day; 30 dailies and 12 monthlies kept).",
         slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = false},
-        [get_db](const BackupInput &in) -> slimr::Json {
+        [get_db](const BackupInput &in) -> BackupOutput {
             std::string dest = in.destPath.get().value_or("log.backup.db");
             get_db().backup(dest);
-            return slimr::Json{{"status", "ok"}, {"destination", dest}};
+            return BackupOutput{
+                .status = std::string("ok"),
+                .destination = std::move(dest),
+            };
         });
 
     app.tool<MineInput>(
         "mine",
         "Mine new Gmail, calendar and WhatsApp activity into the log (entries, deadlines, suggested events), then back up.",
         slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = true},
-        [](const MineInput &) -> slimr::Json {
+        [](const MineInput &) -> MineOutput {
             throw std::runtime_error("Mining pipeline not available (mine.hpp not included)");
         });
 #endif

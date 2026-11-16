@@ -7,7 +7,7 @@ example is not a claim of verified July/OAuth interoperability.
 
 ## App Architecture
 
-The standalone MCP (stdio + Streamable HTTP), JSON CLI, and scheduled mining command are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
+The standalone Streamable HTTP MCP, JSON CLI, and scheduled mining command are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
 
 ```text
 personal-log-mcp/
@@ -31,7 +31,7 @@ personal-log-mcp/
 │   ├── doctor.sh             # Toolchain and required-tool checks (`just doctor`)
 │   ├── formula-shared.ts     # Formula rendering shared by release tooling
 │   ├── release.ts            # Release workflow helper (`just release`)
-│   └── test-mcp.ts           # July 2026-07-28 stdio + ephemeral HTTP smoke test
+│   └── test-mcp.ts           # July 2026-07-28 ephemeral HTTP smoke test
 ├── src/
 │   ├── db.hpp                # `AppDb` over `sqlite.hpp`: schema v1, WAL, per-DB mutex, FTS5 `entries_fts`, CRUD, merge, read-only `sql`, online `backup`
 │   ├── import.hpp            # `parseYearNote` parser for legacy Obsidian `YYYY.md` yearly notes
@@ -40,7 +40,7 @@ personal-log-mcp/
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
 │   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
 │   ├── log_file.hpp          # `--log-file` redirection and 10 MiB rotation (verbatim template file)
-│   └── main.cpp              # Standalone CLI, stdio (`mcp`), and Streamable HTTP (`http` 0.0.0.0:10002, `--log-file`) entrypoint
+│   └── main.cpp              # Standalone CLI and Streamable HTTP (`http` 0.0.0.0:10002, `--log-file`) entrypoint
 ├── tests/
 │   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
 │   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
@@ -62,13 +62,12 @@ personal-log-mcp/
 
 ## Transports & Client Configuration
 
-`personal-log-mcp` is a standalone C++26 binary exposing three invocation modes:
+`personal-log-mcp` is a standalone C++26 binary exposing two invocation modes:
 
 - **Streamable HTTP (`http`):** `personal-log-mcp http` (binds `0.0.0.0:10002`, local endpoint `http://127.0.0.1:10002/mcp`; `--host <addr>` and `--port <n>` override, `--port 0` picks an ephemeral port; `--log-file <path>` redirects output with 10 MiB rotation).
-- **stdio MCP (`mcp`):** `personal-log-mcp mcp` (newline-delimited JSON-RPC over stdin/stdout).
 - **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
 
-> **Breaking MCP `2026-07-28` contract:** Both `http` and `mcp` implement MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
+> **Breaking MCP `2026-07-28` contract:** Streamable HTTP (`http`) implements MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
 
 ### Streamable HTTP (Recommended)
 
@@ -94,19 +93,6 @@ Run via Homebrew (`just install`, which also starts the service) or directly wit
   "mcpServers": {
     "personal-log-mcp": {
       "url": "http://127.0.0.1:10002/mcp"
-    }
-  }
-}
-```
-
-### Standalone stdio MCP
-
-```json
-{
-  "mcpServers": {
-    "personal-log-mcp": {
-      "command": "/absolute/path/to/personal-log-mcp",
-      "args": ["mcp"]
     }
   }
 }
@@ -140,7 +126,7 @@ just test     # Run DB, FTS5, import, HTTP, concurrency, log-file, and mock mini
 just test "<case>"  # Run only matching doctest cases (Debug, BUGSINK_DSN="")
 just build    # Build the Release binary at build/bin/personal-log-mcp (no tests)
 just lint     # clang-format check and clang-tidy bug-finding checks
-just test-mcp # Verify July 2026-07-28 stdio + ephemeral HTTP discovery and tools/list
+just test-mcp # Verify July 2026-07-28 ephemeral HTTP discovery and tools/list
 ```
 
 `just test` with no filter runs CTest, which points HOME, `HOMEBREW_PREFIX` and `TMPDIR` at scratch paths and `PERSONAL_LOG_MINE_CONFIG` at the test fixture. `just test "<case>"` runs the test binary directly with only `BUGSINK_DSN=` set, so path tests isolate their own env. `just test-mcp` runs the server with an isolated environment, no external CLI PATH or credentials, and Bugsink disabled; it never invokes mining, cloud, or database tools.
