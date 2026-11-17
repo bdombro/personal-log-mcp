@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## v3.1.2 - 2026-11-17
+
+- feat: adopt cpp-templates alignment, internal scheduler, and /tools HTTP surface (#1)
+  * feat: use VCPKG_OVERLAY_PORTS and guard release
+  * chore: adopt cpp-templates CI/CD and contributing docs
+  * docs: maintainer setup for release App, secrets, rulesets
+  * docs: soft alignment marker and release-bot contributing docs
+  * feat: add internal onServe mining/backup scheduler with catch-up
+  * feat: server-only CLI, /tools surface, single-flight mine/backup with progress
+  * chore: bump slimr-mcp and slimr-serve vcpkg baselines
+- chore: slow gh run watch polling to 30s
+
 - Drop per-tool CLI invocation in favor of server-only `http` mode with default-on `/tools/<name>` HTTP endpoints
 - Make `mine` and `backup` single-flight (`threadSafe`, HTTP `409` `already_running` on concurrent calls) and emit `mine` stage progress (`collect`, `triage`, `draft`, `apply`, `followUps`, `done`) over NDJSON `/tools/mine` and MCP `notifications/progress`
 - Add internal `onServe` daily mining/backup scheduler with startup missed-run catch-up and `mine.json` `schedule` config (no power assertion or `caffeinate`)
