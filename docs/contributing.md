@@ -1,11 +1,64 @@
-# personal-log-mcp: Developer Reference
+# personal-log-mcp: Contributing
 
 User installation, configuration and compatibility status are in the
 [README](../README.md). This reference preserves implementation details,
 alternative transport schemas and validation commands. A client configuration
 example is not a claim of verified July/OAuth interoperability.
 
-## App Architecture
+<!-- cpp-templates:begin -->
+## Contents
+
+- [Develop and test](#develop-and-test)
+- [Unreleased libraries](#unreleased-libraries)
+- [Rules](#rules)
+- [PR, CI, and release flow](#pr-ci-and-release-flow)
+- [Dependency bumps](#dependency-bumps)
+
+## Develop and test
+
+```bash
+just doctor
+just test
+just lint
+```
+
+Iterate on a single doctest case with `just test "<case>"` (Debug build with ASan + UBSan, `BUGSINK_DSN=""`). For `homebrew-mcp` repos, run `just test-mcp` as well.
+
+## Unreleased libraries
+
+vcpkg reads extra port dirs from `VCPKG_OVERLAY_PORTS`, and an overlay wins over the registry. Point it at a dir of symlinks, one per unreleased lib; manifests never change:
+
+```sh
+mkdir -p ~/.vcpkg/overlays/dev
+ln -s ~/dev/slimr/<lib>/ports/slimr-<lib> ~/.vcpkg/overlays/dev/slimr-<lib>
+export VCPKG_OVERLAY_PORTS=~/.vcpkg/overlays/dev
+just test
+```
+
+Remove the symlink (or `unset VCPKG_OVERLAY_PORTS`) to build against the released lib again. Keep the export out of shell startup files.
+
+## Rules
+
+- Never push directly to `main`; all changes land through squash-merged pull requests.
+- PRs touch no release files (`VERSION`, `CHANGELOG.md`, `versions/`, `Formula/*.rb`, `Casks/*.rb`).
+- Write the PR title (plus optional body) as the changelog entry; squash-merge turns it into one commit on `main`.
+- Sanitize everything (no secrets, tokens, DSNs, or personal data in commits, logs, or docs).
+- Run `just test` (ASan + UBSan) and `just lint` before opening or updating a PR.
+
+## PR, CI, and release flow
+
+- Every PR runs `test.yml`: a `gate` job skips macOS/Linux builds on docs-only PRs, and a single `ci` summary job gates merge.
+- Merging to `main` triggers `release.yml` (one release at a time). It collects squash commits since the last tag (skipping docs-only ranges), picks the bump from merged PR labels (`patch` default, or `release:minor` / `release:major`; agents must ask before adding labels), writes `VERSION`/`vcpkg.json`, `CHANGELOG.md` (and `vcpkg x-add-version` for libraries), commits as the GitHub App, tags `vX.Y.Z`, and publishes the GitHub Release (plus assets and `Formula/*.rb` / `Casks/*.rb` updates).
+- Pre-releases are a known option (tag/channel), not currently built.
+
+## Dependency bumps
+
+Bump a library baseline in `vcpkg-configuration.json` only when a bug fix, new API, or security fix requires it; otherwise wait for the next `just upgrade-deps`.
+<!-- cpp-templates:end -->
+
+## Repository tips
+
+### App Architecture
 
 The standalone Streamable HTTP MCP, JSON CLI, and scheduled mining command are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
 
@@ -138,26 +191,3 @@ PERSONAL_LOG_DB="$PWD/build/dev.db" ./build/bin/personal-log-mcp http --port 200
 ```
 
 On Linux (`ubuntu-24.04`), install `llvm@23` via Homebrew and enable lingering so `brew services` systemd user units survive logout (`loginctl enable-linger "$USER"`).
-
-## Develop against an unreleased lib
-
-vcpkg reads extra port dirs from `VCPKG_OVERLAY_PORTS`, and an overlay wins over the registry. Point it at a dir of symlinks, one per unreleased lib; manifests never change:
-
-```sh
-mkdir -p ~/.vcpkg/overlays/dev
-ln -s ~/dev/slimr/<name>/ports/slimr-<name> ~/.vcpkg/overlays/dev/slimr-<name>
-export VCPKG_OVERLAY_PORTS=~/.vcpkg/overlays/dev
-just test
-```
-
-Remove the symlink (or `unset VCPKG_OVERLAY_PORTS`) to build against the released lib again. Keep the export out of shell startup files. `just release` refuses to run while `VCPKG_OVERLAY_PORTS` is set.
-
-## Release
-
-Add a line under `## Unreleased` in `CHANGELOG.md`, push to `main`, then run:
-
-```bash
-just release patch   # or minor / major
-```
-
-The release workflow runs `test.yml` on each platform, bumps `VERSION`, builds the macOS arm64 and Linux x64 binaries, updates the formula and tags the release.

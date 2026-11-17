@@ -78,7 +78,7 @@ existing servers):
 
 Use either an explicit server entry or a plugin manifest, not both.
 Alternative client schemas are in the
-[developer reference](docs/development.md), or run the direct CLI
+[contributing guide](docs/contributing.md), or run the direct CLI
 (`personal-log-mcp <tool> ['{"arg":"val"}']`).
 
 ## Tools & CLI Commands
@@ -172,4 +172,4 @@ Configure service environment variables in
 
 ## Development
 
-See [docs/development.md](docs/development.md) for local builds, testing, and releases.
+See [docs/contributing.md](docs/contributing.md) for local builds, testing, and releases.
