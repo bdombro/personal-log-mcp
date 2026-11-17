@@ -40,7 +40,7 @@ personal-log-mcp/
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
 │   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
 │   ├── log_file.hpp          # `--log-file` redirection and 10 MiB rotation (verbatim template file)
-│   └── main.cpp              # Standalone CLI and Streamable HTTP (`http` 0.0.0.0:10002, `--log-file`) entrypoint
+│   └── main.cpp              # Standalone CLI and Streamable HTTP (`http` 127.0.0.1:10002, `--log-file`) entrypoint
 ├── tests/
 │   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
 │   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
@@ -64,7 +64,7 @@ personal-log-mcp/
 
 `personal-log-mcp` is a standalone C++26 binary exposing two invocation modes:
 
-- **Streamable HTTP (`http`):** `personal-log-mcp http` (binds `0.0.0.0:10002`, local endpoint `http://127.0.0.1:10002/mcp`; `--host <addr>` and `--port <n>` override, `--port 0` picks an ephemeral port; `--log-file <path>` redirects output with 10 MiB rotation).
+- **Streamable HTTP (`http`):** `personal-log-mcp http` (binds `127.0.0.1:10002`, endpoint `http://127.0.0.1:10002/mcp`; `--host <addr>` and `--port <n>` override, `--port 0` picks an ephemeral port; `--log-file <path>` redirects output with 10 MiB rotation).
 - **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
 
 > **Breaking MCP `2026-07-28` contract:** Streamable HTTP (`http`) implements MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
@@ -138,6 +138,20 @@ PERSONAL_LOG_DB="$PWD/build/dev.db" ./build/bin/personal-log-mcp http --port 200
 ```
 
 On Linux (`ubuntu-24.04`), install `llvm@23` via Homebrew and enable lingering so `brew services` systemd user units survive logout (`loginctl enable-linger "$USER"`).
+
+## Develop against an unreleased lib
+
+Add `"overlay-ports"` to the consumer's `vcpkg-configuration.json`, then run `just test` or `just build` as usual (add one entry per unreleased lib):
+
+```json
+{
+  "overlay-ports": [
+    "<relative path to ~/dev/slimr/<name>/ports/slimr-<name>>"
+  ]
+}
+```
+
+Remove `"overlay-ports"` and bump the registry baseline once the lib is released. Never commit or release with `overlay-ports` set.
 
 ## Release
 

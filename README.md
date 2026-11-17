@@ -52,8 +52,8 @@ brew services start personal-log-mcp
 brew services info personal-log-mcp
 ```
 
-The HTTP server binds `0.0.0.0:10002` (`http://127.0.0.1:10002/mcp` locally;
-pass `--host 127.0.0.1` for loopback-only) and logs to
+The HTTP server binds `127.0.0.1:10002` (`http://127.0.0.1:10002/mcp`;
+pass `--host 0.0.0.0` to expose) and logs to
 `$(brew --prefix)/var/log/personal-log-mcp.log` (rotated at 10 MiB, keeping one
 `.1`). The database defaults to `$(brew --prefix)/var/personal-log-mcp/log.db`
 (directory mode `0700`); set `PERSONAL_LOG_DB` to use another file. Existing
