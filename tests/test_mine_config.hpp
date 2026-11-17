@@ -91,6 +91,10 @@ TEST_SUITE("mining configuration") {
         unknown.insert(1, R"("unknownSetting":true,)");
         writeMineFixture(path, unknown);
         CHECK_THROWS(loadMineConfig(path));
+        invalid = config;
+        invalid.schedule = MineScheduleConfig{.enabled = true, .time = "25:00", .backup = true};
+        writeMineFixture(path, slimr::write_json(invalid));
+        CHECK_THROWS(loadMineConfig(path));
     }
 
     TEST_CASE("missing and invalid config fail before database creation while discovery and status work") {

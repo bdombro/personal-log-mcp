@@ -20,6 +20,7 @@
 
 #if __has_include("mine.hpp")
 #include "mine.hpp"
+#include "scheduler.hpp"
 #endif
 
 namespace personal_log {
@@ -497,6 +498,10 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
                 .added = std::move(res.added),
             };
         });
+
+    app.onServe = [get_db](std::stop_token st) {
+        runMiningScheduler(std::move(st), get_db);
+    };
 #else
     app.tool<BackupInput>(
         "backup",

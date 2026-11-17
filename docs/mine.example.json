@@ -94,5 +94,10 @@
   "selfName": "Alex",
   "timeZone": "Etc/UTC",
   "eventSuggestionNote": "Suggested by personal-log mining. Copy to your own calendar if wanted.",
-  "deadlineNote": "(added by personal-log mining)"
+  "deadlineNote": "(added by personal-log mining)",
+  "schedule": {
+    "enabled": true,
+    "time": "06:00",
+    "backup": true
+  }
 }

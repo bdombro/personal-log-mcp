@@ -27,9 +27,17 @@ The JSON contains `calendars` (source ID → label), `suggestCalendarId`,
 (person tag → note), `kidsDrive` (person tag → folder), `kidsSchoolFolder`,
 `contactGroups`, `whoNames` (tag → display name), `familyAliases` and
 `familySurname` (normalized lowercase aliases/surname excluded from contact
-creation). Empty collections select no sources or targets for that collection.
-Medical examples are fictional; supply only information you are authorized to
-process.
+creation), and optional `schedule` (`enabled`, `time` as `HH:MM` local time,
+and `backup` boolean). Empty collections select no sources or targets for that
+collection. Medical examples are fictional; supply only information you are
+authorized to process.
+
+When `schedule.enabled` is true (default when `schedule` is present), the HTTP
+server runs an internal `onServe` timer thread that catches up any missed run at
+startup (comparing `lastSuccessfulUntil` in `runs` against the latest passed
+slot) and waits on `std::stop_token` until the next daily `schedule.time` slot
+to run `mine` (and `backup` unless `schedule.backup` is false). It uses no
+power assertions and no `caffeinate`.
 
 Optional private `conventions.md` and `recall.md` files in the same
 `$(brew --prefix)/etc/personal-log-mcp/` directory replace the corresponding public MCP resources.

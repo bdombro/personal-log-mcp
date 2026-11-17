@@ -8,4 +8,5 @@
 #if __has_include("test_mine.hpp")
 #include "test_mine.hpp"
 #include "test_mine_config.hpp"
+#include "test_scheduler.hpp"
 #endif

@@ -136,6 +136,10 @@ and WhatsApp, call an LLM, and write approved log/task/contact/note destinations
 Use a separate private suggestion calendar; never write source calendars.
 A mining dry run is not an offline check.
 
+When `schedule` is configured and enabled in `mine.json`, the HTTP server runs
+an internal daily timer (`onServe`) with startup missed-run catch-up (via `runs`)
+and optional post-mine `backup`, without power assertions or `caffeinate`.
+
 Follow the [mining and backup guide](docs/mining.md) and its private example
 configuration. Ordinary log tools do not require that setup.
 
