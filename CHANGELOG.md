@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v3.1.1 - 2026-11-17
+
 - Pin slimr-serve v0.3.0 (OpenAPI 3.1 `GET /openapi.json`, `--openapi` CLI dump, and default `127.0.0.1` bind) and slimr-mcp v0.2.1
 - Internal: verify `GET /openapi.json` in `scripts/test-mcp.ts` and document `overlay-ports` dev workflow
 
