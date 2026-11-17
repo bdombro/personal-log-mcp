@@ -7,6 +7,7 @@
 #include "mine_config.hpp"
 #include "reflect.hpp"
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -20,6 +21,7 @@
 
 #if __has_include("mine.hpp")
 #include "mine.hpp"
+#include "scheduler.hpp"
 #endif
 
 namespace personal_log {
@@ -221,7 +223,6 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.description = "A personal log in SQLite: search, timeline and edits over MCP, plus configurable scheduled mining.";
     app.instructions = std::string(MCP_INSTRUCTIONS);
     app.setBugsink("", "BUGSINK_DSN", "personal-log-mcp@" + std::string(APP_VERSION));
-    app.allowCliTools = true;
 
     // Embedded and file-fallback resources
     app.resources.push_back(slimr::Resource{
@@ -465,12 +466,34 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
         });
 
     // 12. backup & 13. mine
+    struct InFlightGuard {
+        std::atomic<bool> &flag;
+        bool acquired = false;
+        explicit InFlightGuard(std::atomic<bool> &f) noexcept : flag(f) {
+            bool expected = false;
+            acquired = flag.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+        }
+        ~InFlightGuard() {
+            if (acquired) {
+                flag.store(false, std::memory_order_release);
+            }
+        }
+        InFlightGuard(const InFlightGuard &) = delete;
+        InFlightGuard &operator=(const InFlightGuard &) = delete;
+    };
+    auto backupInFlight = std::make_shared<std::atomic<bool>>(false);
+    auto mineInFlight = std::make_shared<std::atomic<bool>>(false);
+
 #if __has_include("mine.hpp")
     app.tool<BackupInput>(
         "backup",
         "Back up the log database to Google Drive (one gzipped copy per day; 30 dailies and 12 monthlies kept).",
-        slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = false},
-        [get_db](const BackupInput &) -> BackupOutput {
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = false}, .threadSafe = true},
+        [get_db, backupInFlight](const BackupInput &) -> BackupOutput {
+            InFlightGuard guard(*backupInFlight);
+            if (!guard.acquired) {
+                throw slimr::ServeException(slimr::ServeErrorCode::InternalError, "already_running", slimr::Json{}, 409);
+            }
             auto res = backupLog(get_db());
             return BackupOutput{
                 .file = std::move(res.file),
@@ -482,14 +505,18 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
     app.tool<MineInput>(
         "mine",
         "Mine new Gmail, calendar and WhatsApp activity into the log (entries, deadlines, suggested events), then back up.",
-        slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = true},
-        [get_db](const MineInput &in) -> MineOutput {
+        slimr::ToolOptions{.annotations = slimr::ToolAnnotations{.readOnlyHint = false, .openWorldHint = true}, .threadSafe = true},
+        [get_db, mineInFlight](const MineInput &in, const slimr::RequestContext &ctx) -> MineOutput {
+            InFlightGuard guard(*mineInFlight);
+            if (!guard.acquired) {
+                throw slimr::ServeException(slimr::ServeErrorCode::InternalError, "already_running", slimr::Json{}, 409);
+            }
             const auto config = loadMineConfig();
             MineOptions opts;
             opts.since = in.since.get();
             opts.until = in.until.get();
             opts.dryRun = in.dryRun.get().value_or(false);
-            auto res = runMine(get_db(), opts, config);
+            auto res = runMine(get_db(), opts, config, &ctx);
             return MineOutput{
                 .since = std::move(res.since),
                 .until = std::move(res.until),
@@ -497,6 +524,10 @@ inline slimr::PluginApp make_personal_log_app(std::shared_ptr<AppDb> sharedDb = 
                 .added = std::move(res.added),
             };
         });
+
+    app.onServe = [get_db](std::stop_token st) {
+        runMiningScheduler(std::move(st), get_db);
+    };
 #else
     app.tool<BackupInput>(
         "backup",

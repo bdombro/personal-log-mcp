@@ -9,10 +9,13 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace personal_log {
@@ -21,6 +24,12 @@ struct WhatsAppChatConfig {
     std::string name;
     std::string kind;
     bool direct = false;
+};
+
+struct MineScheduleConfig {
+    bool enabled = true;
+    std::string time = "06:00";
+    bool backup = true;
 };
 
 struct MineConfig {
@@ -43,7 +52,24 @@ struct MineConfig {
     std::map<std::string, std::string> whoNames;
     std::vector<std::string> familyAliases;
     std::string familySurname;
+    std::optional<MineScheduleConfig> schedule;
 };
+
+inline std::pair<int, int> parseScheduleTime(std::string_view hhmm) {
+    if (hhmm.size() != 5 || hhmm[2] != ':' ||
+        !std::isdigit(static_cast<unsigned char>(hhmm[0])) ||
+        !std::isdigit(static_cast<unsigned char>(hhmm[1])) ||
+        !std::isdigit(static_cast<unsigned char>(hhmm[3])) ||
+        !std::isdigit(static_cast<unsigned char>(hhmm[4]))) {
+        throw std::runtime_error("Invalid mining configuration: schedule.time must be HH:MM");
+    }
+    const int hour = (hhmm[0] - '0') * 10 + (hhmm[1] - '0');
+    const int minute = (hhmm[3] - '0') * 10 + (hhmm[4] - '0');
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        throw std::runtime_error("Invalid mining configuration: schedule.time must be HH:MM");
+    }
+    return {hour, minute};
+}
 
 inline std::filesystem::path personalLogConfigDir() {
     return std::filesystem::path(brew_prefix()) / "etc" / "personal-log-mcp";
@@ -133,6 +159,9 @@ inline MineConfig loadMineConfig(const std::filesystem::path &path = mineConfigP
     }
     config.suggestCalendarId = validateCalendarId(config.suggestCalendarId);
     (void)suggestCalendarId(config);
+    if (config.schedule.has_value()) {
+        (void)parseScheduleTime(config.schedule->time);
+    }
     return config;
 }
 

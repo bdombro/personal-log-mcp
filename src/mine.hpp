@@ -3,6 +3,7 @@
 #include "db.hpp"
 #include "json.hpp"
 #include "mine_config.hpp"
+#include "serve_core.hpp"
 #include "sqlite.hpp"
 
 #include <httplib.h>
@@ -2698,7 +2699,16 @@ inline void applyDraft(
 }
 
 /// Run the mining job: collect, triage, draft, apply, follow-ups.
-inline MineResult runMine(AppDb &db, const MineOptions &options = {}, const MineConfig &config = loadMineConfig()) {
+inline MineResult runMine(
+    AppDb &db,
+    const MineOptions &options = {},
+    const MineConfig &config = loadMineConfig(),
+    const slimr::RequestContext *ctx = nullptr) {
+    auto emitStage = [&](double progress, const char *stage) {
+        if (ctx != nullptr) {
+            ctx->emitProgress(progress, 6.0, std::string(stage));
+        }
+    };
     (void)suggestCalendarId(config);
 
     std::string today = format_iso_now().substr(0, 10);
@@ -2731,6 +2741,7 @@ inline MineResult runMine(AppDb &db, const MineOptions &options = {}, const Mine
     };
 
     try {
+        emitStage(1.0, "collect");
         Collected collected = collect(db, since, until, config);
         for (auto &w : collected.warnings)
             result.warnings.push_back(std::move(w));
@@ -2739,6 +2750,7 @@ inline MineResult runMine(AppDb &db, const MineOptions &options = {}, const Mine
             result.stats[k] = v;
         }
 
+        emitStage(2.0, "triage");
         auto triage = runTriage(collected, usage, result.warnings);
         result.stats["triageItems"] = static_cast<int64_t>(triage.size());
 
@@ -2757,9 +2769,11 @@ inline MineResult runMine(AppDb &db, const MineOptions &options = {}, const Mine
             if (runId) {
                 db.runFinish(*runId, "ok", result.stats);
             }
+            emitStage(6.0, "done");
             return result;
         }
 
+        emitStage(3.0, "draft");
         auto draft = runDraft(collected, triage, usage, result.warnings);
         result.draft = draft;
 
@@ -2775,10 +2789,12 @@ inline MineResult runMine(AppDb &db, const MineOptions &options = {}, const Mine
         }
         result.stats["usage"] = usageObj;
 
+        emitStage(4.0, "apply");
         if (!dryRun) {
             applyDraft(db, collected, triage, draft, result, config);
         }
 
+        emitStage(5.0, "followUps");
         FollowUpContext fuCtx{
             .db = db,
             .collected = collected,
@@ -2810,6 +2826,7 @@ inline MineResult runMine(AppDb &db, const MineOptions &options = {}, const Mine
             db.runFinish(*runId, "ok", result.stats);
         }
 
+        emitStage(6.0, "done");
         return result;
     } catch (const std::exception &e) {
         if (runId) {

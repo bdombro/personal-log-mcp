@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Drop per-tool CLI invocation in favor of server-only `http` mode with default-on `/tools/<name>` HTTP endpoints
+- Make `mine` and `backup` single-flight (`threadSafe`, HTTP `409` `already_running` on concurrent calls) and emit `mine` stage progress (`collect`, `triage`, `draft`, `apply`, `followUps`, `done`) over NDJSON `/tools/mine` and MCP `notifications/progress`
+- Add internal `onServe` daily mining/backup scheduler with startup missed-run catch-up and `mine.json` `schedule` config (no power assertion or `caffeinate`)
+
 ## v3.1.1 - 2026-11-17
 
 - Pin slimr-serve v0.3.0 (OpenAPI 3.1 `GET /openapi.json`, `--openapi` CLI dump, and default `127.0.0.1` bind) and slimr-mcp v0.2.1

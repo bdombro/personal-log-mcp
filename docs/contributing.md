@@ -1,13 +1,173 @@
-# personal-log-mcp: Developer Reference
+# personal-log-mcp: Contributing
 
 User installation, configuration and compatibility status are in the
 [README](../README.md). This reference preserves implementation details,
 alternative transport schemas and validation commands. A client configuration
 example is not a claim of verified July/OAuth interoperability.
 
-## App Architecture
+<!-- cpp-templates:begin -->
+## Contents
 
-The standalone Streamable HTTP MCP, JSON CLI, and scheduled mining command are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
+- [Develop and test](#develop-and-test)
+- [Unreleased libraries](#unreleased-libraries)
+- [Rules](#rules)
+- [PR, CI, and release flow](#pr-ci-and-release-flow)
+- [Maintainer setup](#maintainer-setup)
+- [Dependency bumps](#dependency-bumps)
+
+## Develop and test
+
+```bash
+just doctor
+just test
+just lint
+```
+
+Iterate on a single doctest case with `just test "<case>"` (Debug build with ASan + UBSan, `BUGSINK_DSN=""`). For `homebrew-mcp` repos, run `just test-mcp` as well.
+
+## Unreleased libraries
+
+vcpkg reads extra port dirs from `VCPKG_OVERLAY_PORTS`, and an overlay wins over the registry. Point it at a dir of symlinks, one per unreleased lib; manifests never change:
+
+```sh
+mkdir -p ~/.vcpkg/overlays/dev
+ln -s ~/dev/slimr/<lib>/ports/slimr-<lib> ~/.vcpkg/overlays/dev/slimr-<lib>
+export VCPKG_OVERLAY_PORTS=~/.vcpkg/overlays/dev
+just test
+```
+
+Remove the symlink (or `unset VCPKG_OVERLAY_PORTS`) to build against the released lib again. Keep the export out of shell startup files.
+
+## Rules
+
+- Never push directly to `main`; all changes land through squash-merged pull requests.
+- PRs touch no release files (`VERSION`, `CHANGELOG.md`, `versions/`, `Formula/*.rb`, `Casks/*.rb`).
+- Write the PR title (plus optional body) as the changelog entry; squash-merge turns it into one commit on `main`.
+- Sanitize everything (no secrets, tokens, DSNs, or personal data in commits, logs, or docs).
+- Run `just test` (ASan + UBSan) and `just lint` before opening or updating a PR.
+
+## PR, CI, and release flow
+
+- Every PR runs `test.yml`: a `gate` job skips macOS/Linux builds on docs-only PRs, and a single `ci` summary job gates merge.
+- Merging to `main` triggers `release.yml` (one release at a time). It collects squash commits since the last tag (skipping docs-only ranges), picks the bump from merged PR labels (`patch` default, or `release:minor` / `release:major`; agents must ask before adding labels), writes `VERSION`/`vcpkg.json`, `CHANGELOG.md` (and `vcpkg x-add-version` for libraries), commits as the GitHub App, tags `vX.Y.Z`, and publishes the GitHub Release (plus assets and `Formula/*.rb` / `Casks/*.rb` updates).
+- Pre-releases are a known option (tag/channel), not currently built.
+
+## Maintainer setup
+
+Direct pushes to `main` are blocked; `release.yml` uses a dedicated GitHub App so it can commit release metadata and formula updates without giving humans or agents an admin bypass.
+
+### 1. Create and install the release GitHub App
+
+Create one GitHub App (Settings -> Developer settings -> GitHub Apps):
+
+- **Homepage URL:** any URL (for example, the owner's GitHub profile)
+- **Callback / Setup URLs:** blank; **Webhook Active:** unchecked
+- **Repository permissions:** `Contents: Read and write`, `Metadata: Read-only`
+- **Where can this GitHub App be installed?:** Any account
+
+Record `<app-id>`, generate a private key, and save it locally if needed for manual recovery (it can always be regenerated):
+
+```sh
+chmod 600 ~/.ssh/<app-name>.private-key.pem
+```
+
+Install the App on each owner (org or user) and select the target repositories.
+
+### 2. Store Actions secrets
+
+Org-level (requires org owner and `admin:org` scope):
+
+```sh
+gh auth refresh -h github.com -s admin:org
+gh secret set RELEASE_APP_ID --org <owner> --visibility all --body "<app-id>"
+gh secret set RELEASE_APP_PRIVATE_KEY --org <owner> --visibility all < ~/.ssh/<app-name>.private-key.pem
+gh secret list --org <owner>
+```
+
+Per-repo (for user-owned repos or selected repos):
+
+```sh
+gh secret set RELEASE_APP_ID -R <owner>/<repo> --body "<app-id>"
+gh secret set RELEASE_APP_PRIVATE_KEY -R <owner>/<repo> < ~/.ssh/<app-name>.private-key.pem
+gh secret list -R <owner>/<repo>
+```
+
+`gh secret list` prints secret names only.
+
+### 3. Protect `main`
+
+Create (or `PUT /repos/<owner>/<repo>/rulesets/<ruleset-id>` to update) the `main` ruleset with App-only bypass, required `ci` check, squash-only merges, and no force push or deletion, then enforce squash-only merges on the repo:
+
+```sh
+gh api -X POST /repos/<owner>/<repo>/rulesets --input - <<'JSON'
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] }
+  },
+  "bypass_actors": [
+    { "actor_id": <app-id>, "actor_type": "Integration", "bypass_mode": "always" }
+  ],
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["squash"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [{ "context": "ci" }]
+      }
+    }
+  ]
+}
+JSON
+
+gh api -X PATCH /repos/<owner>/<repo> \
+  -F allow_squash_merge=true \
+  -F allow_merge_commit=false \
+  -F allow_rebase_merge=false
+
+gh api /repos/<owner>/<repo>/rulesets
+```
+
+### 4. Act as the App (emergency fix or manual release step)
+
+Use [`scripts/release-bot`](https://github.com/slimr-down-now/cpp-templates/blob/main/scripts/release-bot) with `RELEASE_APP_ID` and `RELEASE_APP_KEY` set (under the hood it signs a short-lived `RS256` App JWT, exchanges it for an installation token, and revokes the token on exit):
+
+```sh
+export RELEASE_APP_ID=<app-id>
+export RELEASE_APP_KEY=~/.ssh/<app-name>.private-key.pem
+
+release-bot push-main                  # push HEAD to origin main as the App
+release-bot gh release create ...      # run one gh command with GH_TOKEN set
+release-bot shell                      # subshell with GH_TOKEN; revokes on exit
+```
+
+Flags before the subcommand: `--owner <owner>` (token scope; defaults to `origin` owner) and `--repo <owner>/<repo>` (`push-main` target; defaults to `origin`).
+
+## Dependency bumps
+
+Bump a library baseline in `vcpkg-configuration.json` only when a bug fix, new API, or security fix requires it; otherwise wait for the next `just upgrade-deps`.
+<!-- cpp-templates:end -->
+
+## Repository tips
+
+### App Architecture
+
+The standalone Streamable HTTP MCP server and scheduled mining service are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
 
 ```text
 personal-log-mcp/
@@ -40,10 +200,10 @@ personal-log-mcp/
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
 │   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
 │   ├── log_file.hpp          # `--log-file` redirection and 10 MiB rotation (verbatim template file)
-│   └── main.cpp              # Standalone CLI and Streamable HTTP (`http` 127.0.0.1:10002, `--log-file`) entrypoint
+│   └── main.cpp              # Streamable HTTP (`http` 127.0.0.1:10002, `--log-file`) entrypoint
 ├── tests/
-│   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
-│   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
+│   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote` & MCP
+│   ├── test_http.hpp         # Tests covering Streamable HTTP, `/tools/*`, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
 │   ├── test_mine.hpp         # Mock tests covering mining pipeline, LLM fallback, sanitizers, follow-ups & backup pruning
 │   ├── test_mine_config.hpp  # Strict config & lazy-discovery isolation tests
 │   └── test_main.cpp         # Combined test runner (all suites)
@@ -53,7 +213,7 @@ personal-log-mcp/
 
 ### Libraries Used
 
-- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), narrow JSON CLI, and Streamable HTTP server (`cpp-httplib`).
+- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), `/tools/*` HTTP endpoints, and Streamable HTTP server (`cpp-httplib`).
 - **`<sqlite.hpp>` (`-lsqlite3`):** WAL mode + `synchronous=NORMAL` (for file-backed DBs), per-`AppDb` mutex across transactions and 256-statement LRU cache, FTS5 (`entries_fts`), nested savepoints (`merge`), `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON` for `sql`), and online `sqlite3_backup_init` (`backup`).
 - **`<httplib.h>` (`cpp-httplib[openssl]`):** HTTP client with retry/backoff (`fetchWithRetry`).
 - **`<json.hpp>` (`glaze`):** Fast JSON serialization and LLM structured output parsing.
@@ -62,10 +222,10 @@ personal-log-mcp/
 
 ## Transports & Client Configuration
 
-`personal-log-mcp` is a standalone C++26 binary exposing two invocation modes:
+`personal-log-mcp` is a standalone C++26 HTTP server (`personal-log-mcp http`):
 
 - **Streamable HTTP (`http`):** `personal-log-mcp http` (binds `127.0.0.1:10002`, endpoint `http://127.0.0.1:10002/mcp`; `--host <addr>` and `--port <n>` override, `--port 0` picks an ephemeral port; `--log-file <path>` redirects output with 10 MiB rotation).
-- **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
+- **HTTP `/tools/<name>`:** Enabled by default alongside `/mcp` for `curl` debugging (`GET /tools/openapi.json`, `GET /tools/schema`, `POST /tools/<name>`).
 
 > **Breaking MCP `2026-07-28` contract:** Streamable HTTP (`http`) implements MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
 
@@ -138,27 +298,3 @@ PERSONAL_LOG_DB="$PWD/build/dev.db" ./build/bin/personal-log-mcp http --port 200
 ```
 
 On Linux (`ubuntu-24.04`), install `llvm@23` via Homebrew and enable lingering so `brew services` systemd user units survive logout (`loginctl enable-linger "$USER"`).
-
-## Develop against an unreleased lib
-
-Add `"overlay-ports"` to the consumer's `vcpkg-configuration.json`, then run `just test` or `just build` as usual (add one entry per unreleased lib):
-
-```json
-{
-  "overlay-ports": [
-    "<relative path to ~/dev/slimr/<name>/ports/slimr-<name>>"
-  ]
-}
-```
-
-Remove `"overlay-ports"` and bump the registry baseline once the lib is released. Never commit or release with `overlay-ports` set.
-
-## Release
-
-Add a line under `## Unreleased` in `CHANGELOG.md`, push to `main`, then run:
-
-```bash
-just release patch   # or minor / major
-```
-
-The release workflow runs `test.yml` on each platform, bumps `VERSION`, builds the macOS arm64 and Linux x64 binaries, updates the formula and tags the release.
