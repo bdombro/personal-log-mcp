@@ -78,12 +78,11 @@ existing servers):
 
 Use either an explicit server entry or a plugin manifest, not both.
 Alternative client schemas are in the
-[contributing guide](docs/contributing.md), or run the direct CLI
-(`personal-log-mcp <tool> ['{"arg":"val"}']`).
+[contributing guide](docs/contributing.md).
 
-## Tools & CLI Commands
+## Tools
 
-Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:10002/mcp`) and the CLI (`personal-log-mcp <tool> ['{"arg":"val"}']`). Existing `personal-log://` resource URIs are unchanged.
+Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://127.0.0.1:10002/mcp`) and `/tools/<name>` HTTP endpoints (on by default). Existing `personal-log://` resource URIs are unchanged.
 
 | Tool | Mutating | Thread-Safe HTTP | Description |
 | --- | --- | --- | --- |
@@ -97,8 +96,8 @@ Every tool is exposed over Streamable HTTP (`personal-log-mcp http` at `http://1
 | `schema` | No | Yes | Returns the DDL and column documentation for `entries`, `entry_tags`, `entry_sources`, `entries_fts`, and `runs`. |
 | `runs` | No | Yes | List recent mining job runs (`started_at`, `finished_at`, `status`, `window_since`, `window_until`, `stats`, `error`). |
 | `import` | Yes | Serialized | Parse and import legacy Obsidian `YYYY.md` yearly notes (`parseYearNote`), extracting dates, inline `#tags`, `[[wikilinks]]`, markdown links, and `(cal:...)`/`(gm:...)`/`(wa:...)` source tags. Supports `dryRun`. |
-| `backup` | Yes | Serialized | Perform an online SQLite backup (`sqlite3_backup_init`) of `log.db`, compress with `gzip`, upload to Google Drive (`Backups/personal-log/`), and prune older Drive backups (or copy locally via `destPath`). |
-| `mine` | Yes | Serialized | Run the scheduled multi-stage mining pipeline across Gmail, Google Calendar, and WhatsApp (supports `since`, `until`, `dryRun`, `noBackup`). |
+| `backup` | Yes | Yes (single-flight) | Perform an online SQLite backup (`sqlite3_backup_init`) of `log.db`, compress with `gzip`, upload to Google Drive (`Backups/personal-log/`), and prune older Drive backups (or copy locally via `destPath`). |
+| `mine` | Yes | Yes (single-flight) | Run the scheduled multi-stage mining pipeline across Gmail, Google Calendar, and WhatsApp (supports `since`, `until`, `dryRun`, `noBackup`) with progress reporting. |
 | `status` | No | Yes | Returns plugin version. |
 
 ### Embedded MCP Resources
@@ -107,26 +106,41 @@ Compiled directly into the binary (`src/docs_embed.hpp`) and served via `resourc
 - `personal-log://recall` (`docs/recall.md`) — playbook for answering family/personal questions by combining `personal-log`, `obsidian`, `whatsapp`, `google-gws-mcp`, and `brave-history`.
 - `personal-log://conventions` (`docs/conventions.md`) — rules for entry dates, summaries, normalized tags, source IDs (`cal:`, `gm:`, `wa:`), and what belongs in the log vs. Obsidian notes.
 
-### CLI Examples
+### HTTP `/tools` Examples
+
+When `personal-log-mcp http` is running, `/tools/<name>` is enabled by default for `curl` debugging:
 
 ```bash
 # Full-text search with date range and tag filter
-personal-log-mcp search '{"query":"boiler service","from":"2025-01-01","tags":["home"]}'
+curl -X POST http://127.0.0.1:10002/tools/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"boiler service","from":"2025-01-01","tags":["home"]}'
 
 # Add an entry
-personal-log-mcp add '{"date":"2026-11-10","summary":"Ordered replacement air filter","tags":["home","maintenance"]}'
+curl -X POST http://127.0.0.1:10002/tools/add \
+  -H "Content-Type: application/json" \
+  -d '{"entries":[{"date":"2026-11-10","title":"Ordered replacement air filter","tags":["home","maintenance"]}]}'
 
 # Run a read-only SQL aggregation
-personal-log-mcp sql '{"sql":"SELECT tag, COUNT(*) AS n FROM entry_tags GROUP BY tag ORDER BY n DESC LIMIT 10"}'
+curl -X POST http://127.0.0.1:10002/tools/sql \
+  -H "Content-Type: application/json" \
+  -d '{"query":"SELECT tag, COUNT(*) AS n FROM entry_tags GROUP BY tag ORDER BY n DESC LIMIT 10"}'
 
 # Inspect recent mining runs
-personal-log-mcp runs '{"limit":5}'
+curl -X POST http://127.0.0.1:10002/tools/runs \
+  -H "Content-Type: application/json" \
+  -d '{"limit":5}'
 
-# Dry-run the mining job
-personal-log-mcp mine '{"dryRun":true}'
+# Dry-run the mining job with NDJSON progress streaming
+curl -X POST http://127.0.0.1:10002/tools/mine \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/x-ndjson" \
+  -d '{"dryRun":true}'
 
 # Online backup to Google Drive
-personal-log-mcp backup
+curl -X POST http://127.0.0.1:10002/tools/backup \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
 ## Optional Mining and Backup

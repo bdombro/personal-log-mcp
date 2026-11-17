@@ -3,6 +3,7 @@
 #include "app.hpp"
 #include "db.hpp"
 #include "mcp_http.hpp"
+#include "mine.hpp"
 #include "test.hpp"
 #include "test_db.hpp"
 
@@ -15,10 +16,15 @@
 #include <atomic>
 #include <cctype>
 #include <cerrno>
+#include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -291,20 +297,55 @@ inline int run_cli(slimr::PluginApp &app, std::initializer_list<std::string_view
     return app.run(static_cast<int>(ptrs.size()), ptrs.data());
 }
 
-TEST_CASE("enable_http CLI validation rejects bad port values and unknown flags") {
+TEST_CASE("enable_http CLI validation rejects bad port values, tool names, and unknown flags") {
     auto db = std::make_shared<AppDb>(":memory:");
     auto app = make_personal_log_app(db);
     slimr::enable_http(app, slimr::HttpServerOptions{.host = "127.0.0.1", .port = 10002});
 
+    CHECK(run_cli(app, {"personal-log-mcp", "--version"}) == 0);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--port", "not-a-number"}) == 2);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--port", "70000"}) == 2);
     CHECK(run_cli(app, {"personal-log-mcp", "http", "--unknown-flag"}) == 2);
+    const std::string toolsFlag = std::string("--") + "tools";
+    const std::string openapiFlag = std::string("--") + "openapi";
+    CHECK(run_cli(app, {"personal-log-mcp", "http", toolsFlag}) != 0);
+    CHECK(run_cli(app, {"personal-log-mcp", "status"}) != 0);
+    CHECK(run_cli(app, {"personal-log-mcp", openapiFlag}) != 0);
 }
 
-TEST_CASE("CLI direct tool call runs a read-only tool") {
+TEST_CASE("HTTP /tools/<name> runs a read-only tool and root tool routes return 404") {
     auto db = std::make_shared<AppDb>(":memory:");
     auto app = make_personal_log_app(db);
-    CHECK(run_cli(app, {"personal-log-mcp", "status"}) == 0);
+    slimr::McpHttpServer server(
+        app,
+        slimr::HttpServerOptions{
+            .host = "127.0.0.1",
+            .port = 0,
+        });
+    std::string err;
+    REQUIRE(server.start(&err));
+    uint16_t port = server.boundPort();
+    REQUIRE(port > 0);
+
+    CHECK(http_exchange(port, "GET", "/openapi.json").status == 404);
+    CHECK(http_exchange(port, "GET", "/schema").status == 404);
+    CHECK(http_exchange(port, "POST", "/status", "{}", {{"Content-Type", "application/json"}}).status == 404);
+
+    auto openapi = http_exchange(port, "GET", "/tools/openapi.json");
+    CHECK(openapi.status == 200);
+    auto openapiJson = slimr::parse_json<slimr::Json>(openapi.body);
+    REQUIRE(openapiJson.has_value());
+    CHECK((*openapiJson)["paths"].contains("/tools/status"));
+    CHECK((*openapiJson)["paths"]["/tools/status"].contains("post"));
+
+    CHECK(http_exchange(port, "GET", "/tools/schema").status == 200);
+
+    auto statusReply = http_exchange(
+        port, "POST", "/tools/status", "{}", {{"Content-Type", "application/json"}});
+    CHECK(statusReply.status == 200);
+    CHECK(statusReply.body.find(PERSONAL_LOG_APP_VERSION) != std::string::npos);
+
+    server.stop();
 }
 
 TEST_CASE("McpHttpServer serves July 2026-07-28 discovery, tools, resources, and rejects legacy initialize") {
@@ -570,6 +611,261 @@ TEST_CASE("McpHttpServer handles concurrent HTTP requests against file-backed Ap
     auto countRes = db->sql("SELECT COUNT(*) AS cnt FROM entries");
     REQUIRE(countRes.rows.size() == 1);
     CHECK(countRes.rows[0].at("cnt").get<int64_t>() == 1 + kClients * 2);
+}
+
+namespace {
+
+class SlowFakeToolsRunner : public ToolRunner {
+  public:
+    bool pauseOnGoogle = false;
+    std::mutex mu;
+    std::condition_variable cv;
+    bool enteredGoogle = false;
+    bool allowContinue = false;
+
+    void waitEntered() {
+        std::unique_lock<std::mutex> lock(mu);
+        cv.wait(lock, [&] { return enteredGoogle; });
+    }
+
+    void release() {
+        std::lock_guard<std::mutex> lock(mu);
+        allowContinue = true;
+        cv.notify_all();
+    }
+
+    slimr::Json google(const slimr::Json &request) override {
+        if (pauseOnGoogle) {
+            std::unique_lock<std::mutex> lock(mu);
+            enteredGoogle = true;
+            cv.notify_all();
+            cv.wait(lock, [&] { return allowContinue; });
+        }
+        std::string service = request.contains("service") ? request.at("service").get<std::string>() : "";
+        if (service == "drive") {
+            return slimr::Json::object_t{{"files", slimr::Json::array_t{}}};
+        }
+        if (service == "gmail") {
+            return slimr::Json::object_t{{"messages", slimr::Json::array_t{}}};
+        }
+        return slimr::Json::object_t{{"items", slimr::Json::array_t{}}};
+    }
+
+    slimr::Json driveUpload(
+        const std::string &, const std::string &, const std::string &, const std::string &) override {
+        return slimr::Json::object_t{{"id", "drv-test"}};
+    }
+
+    std::string gmailAttachment(
+        const std::string &, const std::string &, const std::string &) override {
+        return "";
+    }
+
+    GmailMessage gmailMessage(const std::string &id) override {
+        return GmailMessage{.id = id};
+    }
+
+    std::vector<WhatsAppChat> whatsappChats() override { return {}; }
+
+    std::vector<WhatsAppMessage> whatsappExport(
+        const std::vector<std::string> &, const std::string &, const std::string &) override {
+        return {};
+    }
+
+    slimr::Json obsidian(const std::string &, const slimr::Json &) override {
+        return slimr::Json::object_t{};
+    }
+
+    LlmReply llm(
+        const std::string &, const std::string &, const std::string &, const std::string &) override {
+        return LlmReply{.text = "{}"};
+    }
+
+    std::optional<std::vector<double>> jev(const std::vector<JevQuestion> &) override {
+        return std::nullopt;
+    }
+};
+
+struct ScopedMineConfigEnv {
+    std::optional<std::string> prev;
+    explicit ScopedMineConfigEnv(const std::string &path) {
+        if (const char *old = std::getenv("PERSONAL_LOG_MINE_CONFIG")) {
+            prev = old;
+        }
+        ::setenv("PERSONAL_LOG_MINE_CONFIG", path.c_str(), 1);
+    }
+    ~ScopedMineConfigEnv() {
+        if (prev.has_value()) {
+            ::setenv("PERSONAL_LOG_MINE_CONFIG", prev->c_str(), 1);
+        } else {
+            ::unsetenv("PERSONAL_LOG_MINE_CONFIG");
+        }
+    }
+    ScopedMineConfigEnv(const ScopedMineConfigEnv &) = delete;
+    ScopedMineConfigEnv &operator=(const ScopedMineConfigEnv &) = delete;
+};
+
+struct ScopedToolRunner {
+    explicit ScopedToolRunner(std::shared_ptr<ToolRunner> r) { setTools(std::move(r)); }
+    ~ScopedToolRunner() { setTools(nullptr); }
+    ScopedToolRunner(const ScopedToolRunner &) = delete;
+    ScopedToolRunner &operator=(const ScopedToolRunner &) = delete;
+};
+
+inline std::string write_disabled_schedule_mine_config(const std::filesystem::path &dir) {
+    auto cfgPath = dir / "mine.json";
+    std::ofstream out(cfgPath);
+    out << R"json({
+  "calendars": {"source1@example.com": "Example"},
+  "suggestCalendarId": "suggestions@example.com",
+  "deadlinesTasklist": "example-deadlines",
+  "whatsappChats": [],
+  "keepDomains": [],
+  "gmailAccount": "alex@example.com",
+  "medicalExpensesNote": "Records/Example.md",
+  "medicalExpensesSince": "2030.01.01",
+  "medsNotes": {},
+  "kidsDrive": {},
+  "kidsSchoolFolder": "School",
+  "contactGroups": [],
+  "whoNames": {"alex": "Alex"},
+  "familyAliases": ["alex"],
+  "familySurname": "morgan",
+  "selfName": "Alex",
+  "timeZone": "Etc/UTC",
+  "eventSuggestionNote": "Suggested",
+  "deadlineNote": "(added)",
+        "schedule" : { "enabled" : false, "time" : "06:00", "backup" : false }
+})json";
+    out.close();
+    return cfgPath.string();
+}
+
+} // namespace
+
+TEST_CASE("mine and backup are single-flight off execMutex and emit progress over NDJSON and MCP") {
+    slimr::testing::TempDirGuard temp("plog_single_flight_");
+    ScopedMineConfigEnv cfgEnv(write_disabled_schedule_mine_config(temp.path));
+
+    auto db = std::make_shared<AppDb>((temp.path / "log.db").string());
+    REQUIRE(db->add({make_entry("2030.09.01", "Non-blocked search target", {"sf"})}).added.size() == 1);
+
+    auto runner = std::make_shared<SlowFakeToolsRunner>();
+    runner->pauseOnGoogle = true;
+    ScopedToolRunner runnerGuard(runner);
+
+    auto app = make_personal_log_app(db);
+    slimr::McpHttpServer server(
+        app,
+        slimr::HttpServerOptions{
+            .host = "127.0.0.1",
+            .port = 0,
+        });
+    std::string err;
+    REQUIRE(server.start(&err));
+    uint16_t port = server.boundPort();
+    REQUIRE(port > 0);
+
+    // 1. Slow mine in-flight: search stays unblocked, concurrent mine gets 409 / MCP error, NDJSON progress streams
+    HttpReply firstMineReply;
+    std::thread mineThread([&]() {
+        firstMineReply = http_exchange(
+            port,
+            "POST",
+            "/tools/mine",
+            R"({"since":"2030-09-01","until":"2030-09-01","dryRun":true})",
+            {{"Content-Type", "application/json"}, {"Accept", "application/x-ndjson"}});
+    });
+
+    runner->waitEntered();
+
+    auto searchReply = http_exchange(
+        port,
+        "POST",
+        "/tools/search",
+        R"({"query":"Non-blocked"})",
+        {{"Content-Type", "application/json"}});
+    CHECK(searchReply.status == 200);
+    CHECK(searchReply.body.find("Non-blocked search target") != std::string::npos);
+
+    auto secondMineHttp = http_exchange(
+        port,
+        "POST",
+        "/tools/mine",
+        R"({"dryRun":true})",
+        {{"Content-Type", "application/json"}});
+    CHECK(secondMineHttp.status == 409);
+    CHECK(secondMineHttp.body.find("already_running") != std::string::npos);
+
+    slimr::Json mcpMineParams = slimr::json_obj();
+    mcpMineParams["name"] = "mine";
+    mcpMineParams["arguments"] = slimr::Json::object_t{{"dryRun", true}};
+    auto secondMineMcp = post_mcp(port, make_mcp_req(42, "tools/call", std::move(mcpMineParams)));
+    CHECK(secondMineMcp.status == 200);
+    auto secondMineMcpJson = slimr::parse_json<slimr::Json>(secondMineMcp.body);
+    REQUIRE(secondMineMcpJson.has_value());
+    REQUIRE(secondMineMcpJson->contains("error"));
+    CHECK((*secondMineMcpJson)["error"]["message"].get<std::string>().find("already_running") != std::string::npos);
+
+    runner->release();
+    mineThread.join();
+
+    CHECK(firstMineReply.status == 200);
+    CHECK(firstMineReply.body.find(R"("type":"progress")") != std::string::npos);
+    CHECK(firstMineReply.body.find(R"("message":"collect")") != std::string::npos);
+    CHECK(firstMineReply.body.find(R"("message":"triage")") != std::string::npos);
+    CHECK(firstMineReply.body.find(R"("message":"done")") != std::string::npos);
+
+    // 2. Concurrent backup returns 409 already_running
+    {
+        std::lock_guard<std::mutex> lock(runner->mu);
+        runner->enteredGoogle = false;
+        runner->allowContinue = false;
+    }
+    HttpReply firstBackupReply;
+    std::thread backupThread([&]() {
+        firstBackupReply = http_exchange(
+            port,
+            "POST",
+            "/tools/backup",
+            "{}",
+            {{"Content-Type", "application/json"}});
+    });
+    runner->waitEntered();
+
+    auto secondBackupHttp = http_exchange(
+        port,
+        "POST",
+        "/tools/backup",
+        "{}",
+        {{"Content-Type", "application/json"}});
+    CHECK(secondBackupHttp.status == 409);
+    CHECK(secondBackupHttp.body.find("already_running") != std::string::npos);
+
+    runner->release();
+    backupThread.join();
+    CHECK(firstBackupReply.status == 200);
+
+    server.stop();
+
+    // 3. dispatchMcpJson emits notifications/progress when _meta.progressToken is provided
+    runner->pauseOnGoogle = false;
+    std::vector<slimr::Json> notifs;
+    slimr::RequestContext notifCtx;
+    notifCtx.notificationChannel = std::make_shared<slimr::McpNotificationChannel>(
+        [&](const slimr::Json &n) { notifs.push_back(n); });
+    slimr::Json req = make_mcp_req(99, "tools/call", slimr::Json::object_t{
+                                                         {"name", "mine"},
+                                                         {"arguments", slimr::Json::object_t{{"since", "2030-09-01"}, {"until", "2030-09-01"}, {"dryRun", true}}},
+                                                     });
+    req["params"]["_meta"]["progressToken"] = "mine-pt-1";
+    auto resp = app.dispatchMcpJson(req, notifCtx);
+    CHECK(!resp.contains("error"));
+    REQUIRE(notifs.size() >= 3);
+    CHECK(notifs[0]["method"].get<std::string>() == "notifications/progress");
+    CHECK(notifs[0]["params"]["progressToken"].get<std::string>() == "mine-pt-1");
+    CHECK(notifs[0]["params"]["message"].get<std::string>() == "collect");
+    CHECK(notifs.back()["params"]["message"].get<std::string>() == "done");
 }
 
 } // namespace personal_log::testing

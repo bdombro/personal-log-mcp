@@ -2,7 +2,7 @@
 
 Written for: AI coding agents working in the `personal-log-mcp` C++26 plugin repository.
 
-`personal-log-mcp` is a C++26 MCP plugin (`2026-07-28` Streamable HTTP on port `10002`) and CLI built on `slimr-mcp` and `slimr-sqlite` that manages a personal log in SQLite + FTS5 (`$(brew --prefix)/var/personal-log-mcp/log.db`), serves the `personal-log://recall` and `personal-log://conventions` resources, backs up the database to Google Drive, and runs the scheduled mining pipeline (`mine`).
+`personal-log-mcp` is a C++26 MCP plugin (`2026-07-28` Streamable HTTP on port `10002`, with default-on `/tools/<name>` HTTP endpoints) built on `slimr-mcp` and `slimr-sqlite` that manages a personal log in SQLite + FTS5 (`$(brew --prefix)/var/personal-log-mcp/log.db`), serves the `personal-log://recall` and `personal-log://conventions` resources, backs up the database to Google Drive, and runs the scheduled mining pipeline (`mine`).
 
 <!-- cpp-templates:begin -->
 <!-- cpp-templates:commit c746b02c9f5b17b63c4921e6adff7fa8c5f6dc37 -->

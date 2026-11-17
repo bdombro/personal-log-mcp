@@ -167,7 +167,7 @@ Bump a library baseline in `vcpkg-configuration.json` only when a bug fix, new A
 
 ### App Architecture
 
-The standalone Streamable HTTP MCP, JSON CLI, and scheduled mining command are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
+The standalone Streamable HTTP MCP server and scheduled mining service are implemented in C++26 on the `slimr-*` libraries (`slimr-mcp`, `slimr-sqlite`); data lives in the SQLite + FTS5 database.
 
 ```text
 personal-log-mcp/
@@ -200,10 +200,10 @@ personal-log-mcp/
 │   ├── docs_embed.hpp        # Compile-time embedded `conventions.md` and `recall.md` resources
 │   ├── app.hpp               # `personal_log::make_personal_log_app()` registering all 13 tools, resources, concurrency annotations, and opt-in error reporting
 │   ├── log_file.hpp          # `--log-file` redirection and 10 MiB rotation (verbatim template file)
-│   └── main.cpp              # Standalone CLI and Streamable HTTP (`http` 127.0.0.1:10002, `--log-file`) entrypoint
+│   └── main.cpp              # Streamable HTTP (`http` 127.0.0.1:10002, `--log-file`) entrypoint
 ├── tests/
-│   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote`, CLI & MCP
-│   ├── test_http.hpp         # Tests covering Streamable HTTP, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
+│   ├── test_db.hpp           # Tests covering `AppDb`, FTS5, `parseYearNote` & MCP
+│   ├── test_http.hpp         # Tests covering Streamable HTTP, `/tools/*`, July 2026-07-28 headers, CLI validation, WAL & multi-threaded concurrency
 │   ├── test_mine.hpp         # Mock tests covering mining pipeline, LLM fallback, sanitizers, follow-ups & backup pruning
 │   ├── test_mine_config.hpp  # Strict config & lazy-discovery isolation tests
 │   └── test_main.cpp         # Combined test runner (all suites)
@@ -213,7 +213,7 @@ personal-log-mcp/
 
 ### Libraries Used
 
-- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), narrow JSON CLI, and Streamable HTTP server (`cpp-httplib`).
+- **`<mcp.hpp>`, `<mcp_http.hpp>`, `<reflect.hpp>`:** Typed MCP tool definitions, compile-time JSON Schema generation, embedded resources (`personal-log://recall`, `personal-log://conventions`), `/tools/*` HTTP endpoints, and Streamable HTTP server (`cpp-httplib`).
 - **`<sqlite.hpp>` (`-lsqlite3`):** WAL mode + `synchronous=NORMAL` (for file-backed DBs), per-`AppDb` mutex across transactions and 256-statement LRU cache, FTS5 (`entries_fts`), nested savepoints (`merge`), `iterateLimited` (`SQLITE_OPEN_READONLY` + `PRAGMA query_only = ON` for `sql`), and online `sqlite3_backup_init` (`backup`).
 - **`<httplib.h>` (`cpp-httplib[openssl]`):** HTTP client with retry/backoff (`fetchWithRetry`).
 - **`<json.hpp>` (`glaze`):** Fast JSON serialization and LLM structured output parsing.
@@ -222,10 +222,10 @@ personal-log-mcp/
 
 ## Transports & Client Configuration
 
-`personal-log-mcp` is a standalone C++26 binary exposing two invocation modes:
+`personal-log-mcp` is a standalone C++26 HTTP server (`personal-log-mcp http`):
 
 - **Streamable HTTP (`http`):** `personal-log-mcp http` (binds `127.0.0.1:10002`, endpoint `http://127.0.0.1:10002/mcp`; `--host <addr>` and `--port <n>` override, `--port 0` picks an ephemeral port; `--log-file <path>` redirects output with 10 MiB rotation).
-- **Direct JSON CLI:** `personal-log-mcp <tool> ['{"arg":"val"}']`.
+- **HTTP `/tools/<name>`:** Enabled by default alongside `/mcp` for `curl` debugging (`GET /tools/openapi.json`, `GET /tools/schema`, `POST /tools/<name>`).
 
 > **Breaking MCP `2026-07-28` contract:** Streamable HTTP (`http`) implements MCP protocol version `2026-07-28` (`server/discover` with `params._meta` and HTTP `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers). Legacy `initialize` is removed and returns `-32601` (HTTP `404`).
 
